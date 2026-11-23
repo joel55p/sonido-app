@@ -67,6 +67,8 @@ const DAYS_FILTER = [
   'Domingo',
 ] as const;
 
+const BASE_TABLE_WIDTH = 1280;
+
 export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
   currentUser,
   schedules,
@@ -95,38 +97,53 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
   const [newDateTo, setNewDateTo] = useState('domingo 06/diciembre/2026');
   const [duplicateCurrent, setDuplicateCurrent] = useState(true);
 
-  // Mobile-specific view controls (does not affect desktop lg: layout)
+  // Mobile-specific view mode ('panorama' vs 'tarjetas')
   const [mobileViewMode, setMobileViewMode] = useState<'panorama' | 'tarjetas'>(
     'panorama'
   );
   const [mobileDayFilter, setMobileDayFilter] = useState<string>('Todos');
-  const [mobileZoom, setMobileZoom] = useState<number>(0.26);
-  const [autoFitScale, setAutoFitScale] = useState<number>(0.26);
-  const [tableNaturalHeight, setTableNaturalHeight] = useState<number>(960);
+
+  // Responsive auto-fit scale for BOTH PC (laptops/monitors narrower than 1280px) and Mobile
+  const [fitScale, setFitScale] = useState<number>(1);
+  const [customZoom, setCustomZoom] = useState<number | null>(null);
+  const [tableNaturalHeight, setTableNaturalHeight] = useState<number>(880);
+  const [containerAvailWidth, setContainerAvailWidth] = useState<number>(1280);
 
   const printableRef = useRef<HTMLDivElement>(null);
-  const mobileViewportRef = useRef<HTMLDivElement>(null);
+  const viewportContainerRef = useRef<HTMLDivElement>(null);
 
-  // Automatically compute the exact panorama scale to fit the 1480px cuadro inside the phone screen width
   useEffect(() => {
-    const updateScale = () => {
-      if (mobileViewportRef.current) {
-        const availW = mobileViewportRef.current.clientWidth - 16;
-        if (availW > 100 && availW < 1024) {
-          const computed = Math.max(0.2, Math.min(0.95, availW / 1480));
-          setAutoFitScale(computed);
-          setMobileZoom(computed);
+    const updateMeasurements = () => {
+      if (viewportContainerRef.current) {
+        const style = window.getComputedStyle(viewportContainerRef.current);
+        const padLeft = parseFloat(style.paddingLeft) || 0;
+        const padRight = parseFloat(style.paddingRight) || 0;
+        const innerW =
+          viewportContainerRef.current.clientWidth - padLeft - padRight;
+
+        if (innerW > 100) {
+          setContainerAvailWidth(innerW);
+          if (innerW < BASE_TABLE_WIDTH) {
+            const calculated = Math.max(0.22, innerW / BASE_TABLE_WIDTH);
+            setFitScale(calculated);
+          } else {
+            setFitScale(1);
+          }
         }
       }
       if (printableRef.current) {
-        setTableNaturalHeight(printableRef.current.offsetHeight || 960);
+        setTableNaturalHeight(printableRef.current.offsetHeight || 880);
       }
     };
 
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, [activeSchedule, mobileViewMode]);
+    updateMeasurements();
+    const timer = setTimeout(updateMeasurements, 120);
+    window.addEventListener('resize', updateMeasurements);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateMeasurements);
+    };
+  }, [activeSchedule, mobileViewMode, isEditMode]);
 
   const memberMap = React.useMemo(() => {
     const map = new Map<string, UserMember>();
@@ -159,6 +176,8 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     if (!printableRef.current) return;
     setIsExporting(true);
     try {
+      // Wait 1 frame so scale resets to 1 before capturing PDF
+      await new Promise((r) => setTimeout(r, 80));
       const safeName = `Cuadro_Privilegios_Sonido_${activeSchedule.dateFrom.replace(
         /[^a-zA-Z0-9_-]/g,
         '_'
@@ -313,7 +332,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
         onClick={() =>
           openCellEditor(srv, slotType, label, memberId, ayudaIndex)
         }
-        className={`border border-slate-700 p-0 h-[38px] align-middle transition-colors relative ${
+        className={`border border-slate-700 p-0 h-[36px] align-middle transition-colors relative ${
           isEditMode && canEdit
             ? 'cursor-pointer hover:bg-blue-100/80 group'
             : ''
@@ -324,20 +343,20 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
         }`}
       >
         {member ? (
-          <div className="flex items-center justify-between w-full h-[38px] px-1.5 gap-1">
-            <span className="text-[10.5px] leading-[1.15] font-bold text-slate-900 text-center flex-1 break-words">
+          <div className="flex items-center justify-between w-full h-[36px] px-1 gap-1">
+            <span className="text-[10px] leading-[1.1] font-bold text-slate-900 text-center flex-1 break-words">
               {member.name}
             </span>
             <img
               src={member.photoUrl}
               alt={member.name}
-              className="w-[32px] h-[36px] object-cover rounded-[2px] border border-slate-300 shrink-0 bg-slate-900"
+              className="w-[30px] h-[34px] object-cover rounded-[2px] border border-slate-300 shrink-0 bg-slate-900"
             />
           </div>
         ) : (
-          <div className="w-full h-[38px] flex items-center justify-center">
+          <div className="w-full h-[36px] flex items-center justify-center">
             {isEditMode && canEdit && (
-              <span className="text-[10px] text-blue-600 font-medium opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+              <span className="text-[9.5px] text-blue-600 font-medium opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
                 <Plus className="w-3 h-3" /> Asignar
               </span>
             )}
@@ -356,8 +375,8 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     return (
       <table className="w-full border-collapse table-fixed text-slate-900 bg-white">
         <colgroup>
-          <col className="w-[26px]" />
-          <col className="w-[95px]" />
+          <col className="w-[24px]" />
+          <col className="w-[88px]" />
           {servicesList.map((s) => (
             <col key={s.id} />
           ))}
@@ -444,7 +463,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           </tr>
 
           {/* Row 4: Uniforme (Orange terracotta row matching the PDF) */}
-          <tr className="bg-[#c25900] text-white text-[10px] font-bold">
+          <tr className="bg-[#c25900] text-white text-[9.5px] font-bold">
             <th
               colSpan={2}
               className="border border-slate-700 py-1 px-1 text-center bg-[#c25900]"
@@ -467,7 +486,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                         e.target.value
                       )
                     }
-                    className="w-full bg-amber-950/80 text-white text-center text-[9.5px] px-1 py-0.5 rounded border border-amber-300"
+                    className="w-full bg-amber-950/80 text-white text-center text-[9px] px-1 py-0.5 rounded border border-amber-300"
                   />
                 ) : (
                   srv.uniform
@@ -482,7 +501,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <tr>
             <td
               colSpan={2}
-              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10px] text-center px-1 py-1"
+              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[9.5px] text-center px-1 py-1"
             >
               Coordinador Servicio
             </td>
@@ -500,7 +519,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <tr>
             <td
               colSpan={2}
-              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10px] text-center px-1 py-1"
+              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[9.5px] text-center px-1 py-1"
             >
               {secondCoordLabel}
             </td>
@@ -518,7 +537,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <tr>
             <td
               colSpan={2}
-              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10px] text-center px-1 py-1"
+              className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[9.5px] text-center px-1 py-1"
             >
               Coordinador Niños
             </td>
@@ -535,13 +554,13 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           {/* Ayudas 1 to 6 */}
           {[0, 1, 2, 3, 4, 5].map((ayudaIdx) => (
             <tr key={`ayuda-row-${ayudaIdx}`}>
-              <td className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10px] text-center">
+              <td className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[9.5px] text-center">
                 {ayudaIdx + 1}
               </td>
               {ayudaIdx === 0 && (
                 <td
                   rowSpan={6}
-                  className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10.5px] text-center align-middle"
+                  className="border border-slate-700 bg-[#d9e1f2] text-slate-900 font-bold text-[10px] text-center align-middle"
                 >
                   Ayudas
                 </td>
@@ -632,8 +651,15 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     (s) => mobileDayFilter === 'Todos' || s.dayGroup === mobileDayFilter
   );
 
-  // Use scale=1 when exporting PDF so html2canvas captures at full 1480px crisp size
-  const activeMobileScale = isExporting ? 1 : mobileZoom;
+  // Determine active scale:
+  // - When exporting PDF, always 1 (full 1280px crisp resolution).
+  // - Otherwise use customZoom if set, or fitScale so 100% of the table fits inside ANY PC or mobile screen without cutting off Viernes or Domingo!
+  const effectiveScale = isExporting ? 1 : customZoom ?? fitScale;
+  const isScaled = effectiveScale < 0.995;
+  const renderTableWidth =
+    containerAvailWidth >= BASE_TABLE_WIDTH && !isExporting
+      ? containerAvailWidth
+      : BASE_TABLE_WIDTH;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -719,7 +745,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
               {isEditMode ? (
                 <>
                   <Check className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Listo</span>
+                  <span className="truncate">Finalizar Edición</span>
                 </>
               ) : (
                 <>
@@ -738,7 +764,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
             className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <Download className="w-4 h-4 shrink-0" />
-            {isExporting ? 'Generando PDF...' : 'Exportar Cuadro a PDF'}
+            {isExporting ? 'Generando PDF...' : 'Exportar a PDF'}
           </button>
 
           <button
@@ -787,21 +813,23 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <div className="flex items-center justify-between gap-2 px-1">
             <button
               type="button"
-              onClick={() => setMobileZoom(autoFitScale)}
+              onClick={() => setCustomZoom(null)}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                Math.abs(mobileZoom - autoFitScale) < 0.02
+                customZoom === null
                   ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              Ver Todo el Panorama
+              Ajustar Todo a Pantalla
             </button>
 
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() =>
-                  setMobileZoom((z) => Math.max(autoFitScale, +(z - 0.1).toFixed(2)))
+                  setCustomZoom(
+                    Math.max(fitScale, +(effectiveScale - 0.1).toFixed(2))
+                  )
                 }
                 className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200"
                 title="Alejar"
@@ -809,12 +837,12 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                 <ZoomOut className="w-4 h-4" />
               </button>
               <span className="text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300 w-11 text-center">
-                {Math.round(mobileZoom * 100)}%
+                {Math.round(effectiveScale * 100)}%
               </span>
               <button
                 type="button"
                 onClick={() =>
-                  setMobileZoom((z) => Math.min(1, +(z + 0.12).toFixed(2)))
+                  setCustomZoom(Math.min(1, +(effectiveScale + 0.12).toFixed(2)))
                 }
                 className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200"
                 title="Acercar"
@@ -852,8 +880,8 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
             <span>
-              <strong>Modo Edición Activo:</strong> Toca cualquier puesto para
-              asignar al hermano, quitarlo o subir su fotografía.
+              <strong>Modo Edición Activo:</strong> Haz clic en cualquier puesto
+              para asignar al hermano, quitarlo o subir su fotografía.
             </span>
           </div>
           <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400 shrink-0">
@@ -879,7 +907,6 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                 key={`mob-card-${srv.id}`}
                 className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm"
               >
-                {/* Service Card Header */}
                 <div className="bg-[#1b365d] text-white px-4 py-3 flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200 block">
@@ -896,13 +923,11 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                   </button>
                 </div>
 
-                {/* Orange Uniform Bar */}
                 <div className="bg-[#c25900] text-white px-4 py-1.5 text-[11px] font-bold flex items-center gap-1.5">
                   <Shirt className="w-3.5 h-3.5 shrink-0" />
                   <span>{srv.uniform}</span>
                 </div>
 
-                {/* Assigned Brothers List */}
                 <div className="p-3 space-y-2">
                   {!hasAnyAssigned && !(isEditMode && canEdit) ? (
                     <div className="text-xs text-slate-400 text-center py-3">
@@ -946,23 +971,22 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
         </div>
       )}
 
-      {/* ================= OFFICIAL CUADRO DE PRIVILEGIOS TABLE (Full size on PC lg:, Scaled Panorama on Mobile) ================= */}
+      {/* ================= OFFICIAL CUADRO DE PRIVILEGIOS TABLE (Auto-fitted to 100% of container on BOTH PC and Mobile!) ================= */}
       <div
-        ref={mobileViewportRef}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 sm:p-5 shadow-md overflow-x-auto ${
-          mobileViewMode === 'tarjetas' && !isExporting ? 'hidden lg:block' : 'block'
+        ref={viewportContainerRef}
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 sm:p-4 shadow-md overflow-x-auto ${
+          mobileViewMode === 'tarjetas' && !isExporting
+            ? 'hidden lg:block'
+            : 'block'
         }`}
       >
-        {/* Mobile Panorama Wrapper scales down smoothly on phones (< lg) while keeping 100% scale on PC (lg:)! */}
         <div
-          className="lg:!w-auto lg:!h-auto overflow-hidden"
           style={
-            typeof window !== 'undefined' &&
-            window.innerWidth < 1024 &&
-            !isExporting
+            isScaled && !isExporting
               ? {
-                  width: `${Math.round(1480 * activeMobileScale)}px`,
-                  height: `${Math.round(tableNaturalHeight * activeMobileScale)}px`,
+                  width: `${Math.round(renderTableWidth * effectiveScale)}px`,
+                  height: `${Math.round(tableNaturalHeight * effectiveScale)}px`,
+                  overflow: 'hidden',
                 }
               : undefined
           }
@@ -970,27 +994,25 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           <div
             id="cuadro-privilegios-printable"
             ref={printableRef}
-            style={
-              typeof window !== 'undefined' &&
-              window.innerWidth < 1024 &&
-              !isExporting
+            style={{
+              width: `${renderTableWidth}px`,
+              ...(isScaled && !isExporting
                 ? {
-                    transform: `scale(${activeMobileScale})`,
+                    transform: `scale(${effectiveScale})`,
                     transformOrigin: 'top left',
-                    width: '1480px',
                   }
-                : undefined
-            }
-            className="min-w-[1480px] bg-white text-slate-900 p-4 rounded-lg lg:!transform-none"
+                : {}),
+            }}
+            className="bg-white text-slate-900 p-3.5 rounded-lg"
           >
             {/* ================= OFFICIAL PDF HEADER ================= */}
             <div className="flex items-stretch justify-between gap-4 mb-2.5 border-b-2 border-slate-800 pb-2">
               {/* Left Logo Box */}
-              <div className="w-[185px] bg-black rounded-md px-3 py-2 flex items-center gap-2.5 shrink-0 border border-slate-800">
+              <div className="w-[180px] bg-black rounded-md px-3 py-2 flex items-center gap-2.5 shrink-0 border border-slate-800">
                 <img
                   src="/logo-sonido.png"
                   alt="Sonido Logo"
-                  className="w-12 h-12 object-contain shrink-0"
+                  className="w-11 h-11 object-contain shrink-0"
                 />
                 <div className="text-white leading-tight">
                   <div className="text-[9px] tracking-widest uppercase text-blue-300 font-semibold">
@@ -1088,7 +1110,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
               </div>
 
               {/* Right Theme Box */}
-              <div className="w-[155px] rounded-md bg-gradient-to-br from-amber-800 via-amber-700 to-yellow-900 text-white p-2 flex flex-col items-center justify-center text-center shrink-0 border border-amber-600 shadow-inner">
+              <div className="w-[150px] rounded-md bg-gradient-to-br from-amber-800 via-amber-700 to-yellow-900 text-white p-2 flex flex-col items-center justify-center text-center shrink-0 border border-amber-600 shadow-inner">
                 <span className="text-[9px] uppercase tracking-widest text-amber-200 font-semibold">
                   Ministerios Ebenezer
                 </span>
@@ -1350,8 +1372,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                 Cancelar
               </button>
               <button
-                type="button"
-                onClick={handleCreateNewSchedule}
+                type="submit"
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer"
               >
                 Crear Cuadro
