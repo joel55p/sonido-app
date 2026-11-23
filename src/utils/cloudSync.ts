@@ -1,7 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { UserMember, PrivilegeSchedule, Announcement } from '../types';
 
-const SUPABASE_CONFIG_KEY = 'sonido_ebenezer_supabase_cfg';
+const SUPABASE_CONFIG_KEY = 'sonido_ebenezer_supabase_cfg_v3';
+
+// Credenciales oficiales del proyecto Supabase Sonido-Ebenezer
+const PROJECT_SUPABASE_URL = 'https://krpljcbuaqvduhchllda.supabase.co';
+const PROJECT_SUPABASE_KEY = 'sb_publishable_cDxk2jWdTNHVAsXWivpNBw_fMP3ossQ';
+
+function normalizeSupabaseUrl(rawUrl: string): string {
+  return rawUrl
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, '')
+    .replace(/\/+$/, '');
+}
 
 export interface SupabaseConfig {
   url: string;
@@ -10,17 +21,23 @@ export interface SupabaseConfig {
 }
 
 export function getSavedSupabaseConfig(): SupabaseConfig {
-  const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  const envUrl = normalizeSupabaseUrl(
+    import.meta.env.VITE_SUPABASE_URL || PROJECT_SUPABASE_URL
+  );
+  const envKey = (
+    import.meta.env.VITE_SUPABASE_ANON_KEY || PROJECT_SUPABASE_KEY
+  ).trim();
 
   try {
     const raw = localStorage.getItem(SUPABASE_CONFIG_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const finalUrl = normalizeSupabaseUrl(parsed.url || envUrl);
+      const finalKey = (parsed.anonKey || envKey).trim();
       return {
-        url: parsed.url || envUrl,
-        anonKey: parsed.anonKey || envKey,
-        enabled: Boolean(parsed.enabled && (parsed.url || envUrl) && (parsed.anonKey || envKey)),
+        url: finalUrl,
+        anonKey: finalKey,
+        enabled: Boolean(finalUrl && finalKey),
       };
     }
   } catch {
@@ -35,7 +52,13 @@ export function getSavedSupabaseConfig(): SupabaseConfig {
 }
 
 export function saveSupabaseConfig(cfg: SupabaseConfig): void {
-  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(cfg));
+  localStorage.setItem(
+    SUPABASE_CONFIG_KEY,
+    JSON.stringify({
+      ...cfg,
+      url: normalizeSupabaseUrl(cfg.url),
+    })
+  );
 }
 
 export function getSupabaseClient(): SupabaseClient | null {
@@ -58,41 +81,68 @@ export interface AppStatePayload {
 
 /**
  * Pushes the unified state to Supabase table `sonido_app_state` (id = 'main').
- * Using a single JSONB state row + individual rows makes free-tier usage virtually zero
- * and avoids complex migrations for a 50-person church team.
  */
-export async function pushStateToCloud(payload: AppStatePayload): Promise<{ ok: boolean; error?: string }> {
+export async function pushStateToCloud(
+  payload: AppStatePayload
+): Promise<{ ok: boolean; error?: string }> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, error: 'Supabase no está configurado o activado.' };
+  if (!client) {
+    return {
+      ok: false,
+      error:
+        'Falta configurar la URL y Publishable Key de Supabase en la aplicación.',
+    };
+  }
 
   try {
     const { error } = await client
       .from('sonido_app_state')
-      .upsert({ id: 'main', payload, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      .upsert(
+        { id: 'main', payload, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
 
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   } catch (err: unknown) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Error de red' };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Error de red',
+    };
   }
 }
 
-export async function pullStateFromCloud(): Promise<{ ok: boolean; data?: AppStatePayload; error?: string }> {
+export async function pullStateFromCloud(): Promise<{
+  ok: boolean;
+  data?: AppStatePayload;
+  error?: string;
+}> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, error: 'Supabase no está configurado o activado.' };
+  if (!client) {
+    return {
+      ok: false,
+      error:
+        'Falta configurar la URL y Publishable Key de Supabase en la aplicación.',
+    };
+  }
 
   try {
     const { data, error } = await client
       .from('sonido_app_state')
       .select('payload')
       .eq('id', 'main')
-      .single();
+      .maybeSingle();
 
     if (error) return { ok: false, error: error.message };
-    if (!data?.payload) return { ok: false, error: 'No hay datos guardados aún en la nube.' };
+    if (!data?.payload) {
+      return { ok: false, error: 'Aún no hay fila main en sonido_app_state.' };
+    }
     return { ok: true, data: data.payload as AppStatePayload };
   } catch (err: unknown) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Error de red' };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Error de red',
+    };
   }
 }
 
@@ -103,12 +153,17 @@ create table if not exists public.sonido_app_state (
   updated_at timestamptz default now()
 );
 
--- Permitir lectura y escritura desde la app web de Sonido
+grant usage on schema public to anon, authenticated;
+grant all on table public.sonido_app_state to anon, authenticated, service_role;
+
 alter table public.sonido_app_state enable row level security;
+
+drop policy if exists "Acceso completo departamento de sonido" on public.sonido_app_state;
 
 create policy "Acceso completo departamento de sonido"
   on public.sonido_app_state
   for all
+  to anon, authenticated
   using (true)
   with check (true);
 `;

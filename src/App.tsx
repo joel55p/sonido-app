@@ -158,7 +158,29 @@ export function App() {
     if (cfg.enabled && cfg.url && cfg.anonKey) {
       const res = await pullStateFromCloud();
       if (res.ok && res.data) {
-        setMembers(res.data.members || []);
+        let cloudMembers = res.data.members || [];
+        // If current local user is not yet in cloudMembers, merge and push to cloud
+        const localCurrent = members.find((m) => m.id === currentUserId);
+        if (
+          localCurrent &&
+          !cloudMembers.some(
+            (cm) => cm.email.toLowerCase() === localCurrent.email.toLowerCase()
+          )
+        ) {
+          cloudMembers = [...cloudMembers, localCurrent];
+          await pushStateToCloud({
+            members: cloudMembers,
+            schedules: res.data.schedules?.length
+              ? res.data.schedules
+              : schedules,
+            activeScheduleId: res.data.activeScheduleId || activeScheduleId,
+            announcements: res.data.announcements?.length
+              ? res.data.announcements
+              : announcements,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        setMembers(cloudMembers);
         if (res.data.schedules?.length) {
           setSchedules(res.data.schedules);
         }
@@ -168,9 +190,18 @@ export function App() {
         if (res.data.announcements?.length) {
           setAnnouncements(res.data.announcements);
         }
+      } else if (members.length > 0) {
+        // Table sonido_app_state is empty in Supabase -> initialize it with current local state!
+        await pushStateToCloud({
+          members,
+          schedules,
+          activeScheduleId,
+          announcements,
+          updatedAt: new Date().toISOString(),
+        });
       }
     }
-  }, []);
+  }, [members, schedules, activeScheduleId, announcements, currentUserId]);
 
   // Auto-pull from Supabase on startup and every 12 seconds so all devices stay in sync
   useEffect(() => {
