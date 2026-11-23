@@ -9,6 +9,11 @@ import {
   processUploadedPhoto,
 } from '../utils/mediaAndPdf';
 import {
+  generateAvailableWeeks,
+  buildWeekFromDate,
+  WeekOption,
+} from '../utils/weekDates';
+import {
   Download,
   Edit3,
   Check,
@@ -27,6 +32,8 @@ import {
   ZoomIn,
   ZoomOut,
   Shirt,
+  CalendarCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 interface CuadroPrivilegiosViewProps {
@@ -93,9 +100,48 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
   );
   const [memberSearch, setMemberSearch] = useState('');
   const [showNewWeekModal, setShowNewWeekModal] = useState(false);
-  const [newDateFrom, setNewDateFrom] = useState('lunes 30/noviembre/2026');
-  const [newDateTo, setNewDateTo] = useState('domingo 06/diciembre/2026');
   const [duplicateCurrent, setDuplicateCurrent] = useState(true);
+
+  // Automatic real calendar weeks (Lunes a Domingo)
+  const availableWeeks = React.useMemo(
+    () => generateAvailableWeeks(1, 10),
+    []
+  );
+
+  // Check if a week already exists in schedules
+  const isWeekAlreadyCreated = React.useCallback(
+    (week: WeekOption) => {
+      return schedules.some(
+        (s) =>
+          s.dateFrom.toLowerCase() === week.dateFrom.toLowerCase() &&
+          s.dateTo.toLowerCase() === week.dateTo.toLowerCase()
+      );
+    },
+    [schedules]
+  );
+
+  const [selectedWeekOption, setSelectedWeekOption] =
+    useState<WeekOption>(() => {
+      const firstFree = availableWeeks.find(
+        (w) =>
+          !schedules.some(
+            (s) => s.dateFrom.toLowerCase() === w.dateFrom.toLowerCase()
+          )
+      );
+      return firstFree || availableWeeks[1] || availableWeeks[0];
+    });
+
+  const [weekModalError, setWeekModalError] = useState('');
+
+  // When opening the New Cuadro modal, pre-select the first available (not yet created) week
+  const handleOpenNewWeekModal = () => {
+    setWeekModalError('');
+    const firstFree = availableWeeks.find((w) => !isWeekAlreadyCreated(w));
+    if (firstFree) {
+      setSelectedWeekOption(firstFree);
+    }
+    setShowNewWeekModal(true);
+  };
 
   // Mobile-specific view mode ('panorama' vs 'tarjetas')
   const [mobileViewMode, setMobileViewMode] = useState<'panorama' | 'tarjetas'>(
@@ -158,6 +204,20 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     (s) => s.block === 'weekend'
   );
 
+  // Count how many assignments exist in the current schedule (for the "Copiar asignaciones" info)
+  const currentAssignedCount = React.useMemo(() => {
+    let count = 0;
+    activeSchedule.services.forEach((s) => {
+      if (s.assignments.coordinadorServicio) count++;
+      if (s.assignments.segundoCoordinador) count++;
+      if (s.assignments.coordinadorNinos) count++;
+      s.assignments.ayudas.forEach((a) => {
+        if (a) count++;
+      });
+    });
+    return count;
+  }, [activeSchedule]);
+
   // Group headers for top row (e.g. Lunes colspan 1, Martes colspan 3...)
   const getDayGroups = (servicesList: ServiceColumn[]) => {
     const groups: { day: string; count: number }[] = [];
@@ -176,7 +236,6 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     if (!printableRef.current) return;
     setIsExporting(true);
     try {
-      // Wait 1 frame so scale resets to 1 before capturing PDF
       await new Promise((r) => setTimeout(r, 80));
       const safeName = `Cuadro_Privilegios_Sonido_${activeSchedule.dateFrom.replace(
         /[^a-zA-Z0-9_-]/g,
@@ -250,6 +309,15 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
 
   const handleCreateNewSchedule = (e: React.FormEvent) => {
     e.preventDefault();
+    setWeekModalError('');
+
+    if (isWeekAlreadyCreated(selectedWeekOption)) {
+      setWeekModalError(
+        `Ya existe un cuadro creado para la semana del ${selectedWeekOption.dateFrom} al ${selectedWeekOption.dateTo}. Selecciona otra semana disponible.`
+      );
+      return;
+    }
+
     const clonedServices: ServiceColumn[] = activeSchedule.services.map((s) => ({
       ...s,
       assignments: duplicateCurrent
@@ -268,10 +336,10 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     }));
 
     const newSched: PrivilegeSchedule = {
-      id: `sched-${Date.now()}`,
+      id: `sched-${selectedWeekOption.key}-${Date.now()}`,
       title: 'Cuadro de Privilegios',
-      dateFrom: newDateFrom.trim(),
-      dateTo: newDateTo.trim(),
+      dateFrom: selectedWeekOption.dateFrom,
+      dateTo: selectedWeekOption.dateTo,
       verseText: activeSchedule.verseText,
       verseRef: activeSchedule.verseRef,
       yearTheme: activeSchedule.yearTheme,
@@ -651,9 +719,6 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
     (s) => mobileDayFilter === 'Todos' || s.dayGroup === mobileDayFilter
   );
 
-  // Determine active scale:
-  // - When exporting PDF, always 1 (full 1280px crisp resolution).
-  // - Otherwise use customZoom if set, or fitScale so 100% of the table fits inside ANY PC or mobile screen without cutting off Viernes or Domingo!
   const effectiveScale = isExporting ? 1 : customZoom ?? fitScale;
   const isScaled = effectiveScale < 0.995;
   const renderTableWidth =
@@ -688,7 +753,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           {canEdit && (
             <button
               type="button"
-              onClick={() => setShowNewWeekModal(true)}
+              onClick={handleOpenNewWeekModal}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/10 hover:bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-xs font-semibold transition-colors cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5" />
@@ -808,7 +873,6 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           </button>
         </div>
 
-        {/* Zoom Controls when in Mobile Panorama Mode */}
         {mobileViewMode === 'panorama' && (
           <div className="flex items-center justify-between gap-2 px-1">
             <button
@@ -853,7 +917,6 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
           </div>
         )}
 
-        {/* Day Filter Pills when in Mobile Cards Mode */}
         {mobileViewMode === 'tarjetas' && (
           <div className="flex gap-1.5 overflow-x-auto pb-1">
             {DAYS_FILTER.map((day) => (
@@ -1036,43 +1099,49 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                   {activeSchedule.title}
                 </h3>
 
-                <div className="flex items-center justify-center gap-4 text-[11px] font-bold text-slate-900 mt-1">
-                  <span>Servicios</span>
-                  <span>del</span>
+                <div className="flex items-center justify-center gap-3 text-[11px] font-bold text-slate-900 mt-1">
+                  <span>Servicios del</span>
                   {isEditMode && canEdit ? (
-                    <input
-                      type="text"
-                      value={activeSchedule.dateFrom}
-                      onChange={(e) =>
-                        onUpdateSchedule({
-                          ...activeSchedule,
-                          dateFrom: e.target.value,
-                        })
-                      }
-                      className="px-2 py-0.5 border border-blue-500 rounded bg-blue-50 text-center text-xs font-bold"
-                    />
+                    <select
+                      value={`${activeSchedule.dateFrom}|${activeSchedule.dateTo}`}
+                      onChange={(e) => {
+                        const [from, to] = e.target.value.split('|');
+                        if (from && to) {
+                          onUpdateSchedule({
+                            ...activeSchedule,
+                            dateFrom: from,
+                            dateTo: to,
+                          });
+                        }
+                      }}
+                      className="px-2.5 py-0.5 border border-blue-500 rounded bg-blue-50 text-xs font-bold text-slate-900 cursor-pointer"
+                    >
+                      {/* Current schedule's week */}
+                      <option
+                        value={`${activeSchedule.dateFrom}|${activeSchedule.dateTo}`}
+                      >
+                        {activeSchedule.dateFrom} al {activeSchedule.dateTo}
+                      </option>
+                      {availableWeeks.map((w) => (
+                        <option
+                          key={w.key}
+                          value={`${w.dateFrom}|${w.dateTo}`}
+                        >
+                          {w.dateFrom} al {w.dateTo}{' '}
+                          {w.relativeBadge ? `(${w.relativeBadge})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
-                    <span className="underline decoration-slate-400">
-                      {activeSchedule.dateFrom}
-                    </span>
-                  )}
-                  <span>al</span>
-                  {isEditMode && canEdit ? (
-                    <input
-                      type="text"
-                      value={activeSchedule.dateTo}
-                      onChange={(e) =>
-                        onUpdateSchedule({
-                          ...activeSchedule,
-                          dateTo: e.target.value,
-                        })
-                      }
-                      className="px-2 py-0.5 border border-blue-500 rounded bg-blue-50 text-center text-xs font-bold"
-                    />
-                  ) : (
-                    <span className="underline decoration-slate-400">
-                      {activeSchedule.dateTo}
-                    </span>
+                    <>
+                      <span className="underline decoration-slate-400">
+                        {activeSchedule.dateFrom}
+                      </span>
+                      <span>al</span>
+                      <span className="underline decoration-slate-400">
+                        {activeSchedule.dateTo}
+                      </span>
+                    </>
                   )}
                 </div>
 
@@ -1305,77 +1374,201 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL FOR CREATING A NEW WEEKLY SCHEDULE ================= */}
+      {/* ================= MODAL FOR CREATING A NEW WEEKLY SCHEDULE (SMART CALENDAR WEEK PICKER) ================= */}
       {showNewWeekModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateNewSchedule}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Crear Nuevo Cuadro de Privilegios
-              </h3>
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <CalendarCheck className="w-5 h-5 text-blue-400 shrink-0" />
+                <div>
+                  <h3 className="text-base font-extrabold">
+                    Crear Nuevo Cuadro de Privilegios
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Selecciona una semana oficial (Lunes a Domingo)
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowNewWeekModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Fecha Inicio (Lunes)
+            <div className="p-5 overflow-y-auto space-y-4">
+              {weekModalError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{weekModalError}</span>
+                </div>
+              )}
+
+              {/* Selected Week Preview Card */}
+              <div className="p-4 rounded-2xl bg-blue-600/10 border-2 border-blue-500/40 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                    Semana Seleccionada (Lunes a Domingo)
+                  </span>
+                  {selectedWeekOption.relativeBadge && (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                      {selectedWeekOption.relativeBadge}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                  Del <span className="text-blue-600 dark:text-blue-400">{selectedWeekOption.dateFrom}</span>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                  Al <span className="text-blue-600 dark:text-blue-400">{selectedWeekOption.dateTo}</span>
+                </div>
+              </div>
+
+              {/* List of Available Upcoming Weeks */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+                  Semanas Disponibles en el Calendario:
+                </label>
+
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                  {availableWeeks.map((week) => {
+                    const alreadyCreated = isWeekAlreadyCreated(week);
+                    const isSelected = selectedWeekOption.key === week.key;
+
+                    return (
+                      <button
+                        key={week.key}
+                        type="button"
+                        disabled={alreadyCreated}
+                        onClick={() => {
+                          setSelectedWeekOption(week);
+                          setWeekModalError('');
+                        }}
+                        className={`w-full p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
+                          alreadyCreated
+                            ? 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-55 cursor-not-allowed'
+                            : isSelected
+                            ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20 cursor-pointer'
+                            : 'bg-slate-50 dark:bg-slate-800/80 hover:border-blue-400 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold truncate">
+                              {week.shortLabel}
+                            </span>
+                            {week.relativeBadge && (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  isSelected
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-blue-500/15 text-blue-600 dark:text-blue-300'
+                                }`}
+                              >
+                                {week.relativeBadge}
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className={`text-[11px] mt-0.5 truncate ${
+                              isSelected
+                                ? 'text-blue-100'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {week.dateFrom} al {week.dateTo}
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold shrink-0 ${
+                            alreadyCreated
+                              ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                              : isSelected
+                              ? 'bg-emerald-400 text-slate-950'
+                              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          }`}
+                        >
+                          {alreadyCreated
+                            ? 'Ya Creado'
+                            : isSelected
+                            ? 'Seleccionada'
+                            : 'Disponible'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Native Date Picker fallback that auto-snaps to Monday-Sunday of the chosen week */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    ¿Buscas otra fecha del año?
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Elige cualquier día y se calculará su Lunes a Domingo
+                    automáticamente.
+                  </p>
+                </div>
+                <input
+                  type="date"
+                  value={selectedWeekOption.mondayIso}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    const customWeek = buildWeekFromDate(e.target.value);
+                    setSelectedWeekOption(customWeek);
+                    setWeekModalError('');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                />
+              </div>
+
+              {/* Copy assignments from current week checkbox */}
+              <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={duplicateCurrent}
+                  onChange={(e) => setDuplicateCurrent(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-emerald-600"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 dark:text-white block">
+                    Copiar asignaciones de la semana actual como base
+                  </span>
+                  <span className="text-slate-600 dark:text-slate-300 text-[11px]">
+                    {duplicateCurrent
+                      ? `Se copiarán los puestos actuales (${currentAssignedCount} asignaciones de la semana ${activeSchedule.dateFrom}) para que solo edites los cambios.`
+                      : 'El nuevo cuadro se creará totalmente en blanco sin ningún hermano asignado.'}
+                  </span>
+                </div>
               </label>
-              <input
-                type="text"
-                required
-                value={newDateFrom}
-                onChange={(e) => setNewDateFrom(e.target.value)}
-                placeholder="Ej: lunes 30/noviembre/2026"
-                className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-              />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Fecha Fin (Domingo)
-              </label>
-              <input
-                type="text"
-                required
-                value={newDateTo}
-                onChange={(e) => setNewDateTo(e.target.value)}
-                placeholder="Ej: domingo 06/diciembre/2026"
-                className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-              />
-            </div>
-
-            <label className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={duplicateCurrent}
-                onChange={(e) => setDuplicateCurrent(e.target.checked)}
-                className="rounded text-blue-600"
-              />
-              Copiar asignaciones de la semana actual como base
-            </label>
-
-            <div className="flex justify-end gap-2 pt-2">
+            {/* Footer buttons */}
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => setShowNewWeekModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer"
+                disabled={isWeekAlreadyCreated(selectedWeekOption)}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-extrabold shadow-lg shadow-blue-600/25 cursor-pointer"
               >
-                Crear Cuadro
+                <CalendarCheck className="w-4 h-4" />
+                Crear Cuadro de esta Semana
               </button>
             </div>
           </form>
