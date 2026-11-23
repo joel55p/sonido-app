@@ -153,33 +153,27 @@ export function App() {
     }
   }, [currentUserId]);
 
+  const isMutatingRef = React.useRef(false);
+
   const syncFromCloud = useCallback(async () => {
+    if (isMutatingRef.current) return;
     const cfg = getSavedSupabaseConfig();
     if (cfg.enabled && cfg.url && cfg.anonKey) {
       const res = await pullStateFromCloud();
+      if (isMutatingRef.current) return;
       if (res.ok && res.data) {
-        let cloudMembers = res.data.members || [];
-        // If current local user is not yet in cloudMembers, merge and push to cloud
-        const localCurrent = members.find((m) => m.id === currentUserId);
+        const cloudMembers = res.data.members || [];
+
+        // Si el usuario actual conectado en este teléfono/PC ya no existe en Supabase
+        // (porque el Diácono o Coordinador eliminó su cuenta), cerrar su sesión inmediatamente:
         if (
-          localCurrent &&
-          !cloudMembers.some(
-            (cm) => cm.email.toLowerCase() === localCurrent.email.toLowerCase()
-          )
+          currentUserId &&
+          !cloudMembers.some((cm) => cm.id === currentUserId)
         ) {
-          cloudMembers = [...cloudMembers, localCurrent];
-          await pushStateToCloud({
-            members: cloudMembers,
-            schedules: res.data.schedules?.length
-              ? res.data.schedules
-              : schedules,
-            activeScheduleId: res.data.activeScheduleId || activeScheduleId,
-            announcements: res.data.announcements?.length
-              ? res.data.announcements
-              : announcements,
-            updatedAt: new Date().toISOString(),
-          });
+          setCurrentUserId(null);
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
         }
+
         setMembers(cloudMembers);
         if (res.data.schedules?.length) {
           setSchedules(res.data.schedules);
@@ -190,25 +184,17 @@ export function App() {
         if (res.data.announcements?.length) {
           setAnnouncements(res.data.announcements);
         }
-      } else if (members.length > 0) {
-        // Table sonido_app_state is empty in Supabase -> initialize it with current local state!
-        await pushStateToCloud({
-          members,
-          schedules,
-          activeScheduleId,
-          announcements,
-          updatedAt: new Date().toISOString(),
-        });
       }
     }
-  }, [members, schedules, activeScheduleId, announcements, currentUserId]);
+  }, [currentUserId]);
 
-  // Auto-pull from Supabase on startup and every 12 seconds so all devices stay in sync
+  // Auto-pull from Supabase on startup and every 5 seconds so all devices stay in sync
+  // and deleted users are immediately kicked out
   useEffect(() => {
     syncFromCloud();
     const interval = setInterval(() => {
       syncFromCloud();
-    }, 12000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [syncFromCloud]);
 
@@ -226,7 +212,7 @@ export function App() {
   }, [schedules, activeScheduleId]);
 
   // Cloud Sync helper
-  const triggerAutoCloudPush = (
+  const triggerAutoCloudPush = async (
     nextMembers = members,
     nextSchedules = schedules,
     nextActiveId = activeScheduleId,
@@ -234,13 +220,18 @@ export function App() {
   ) => {
     const cfg = getSavedSupabaseConfig();
     if (cfg.enabled && cfg.url && cfg.anonKey) {
-      pushStateToCloud({
-        members: nextMembers,
-        schedules: nextSchedules,
-        activeScheduleId: nextActiveId,
-        announcements: nextAnnouncements,
-        updatedAt: new Date().toISOString(),
-      });
+      isMutatingRef.current = true;
+      try {
+        await pushStateToCloud({
+          members: nextMembers,
+          schedules: nextSchedules,
+          activeScheduleId: nextActiveId,
+          announcements: nextAnnouncements,
+          updatedAt: new Date().toISOString(),
+        });
+      } finally {
+        isMutatingRef.current = false;
+      }
     }
   };
 
@@ -251,32 +242,45 @@ export function App() {
   };
 
   const handleRegister = async (newMember: UserMember) => {
-    // First pull latest from cloud if available so we never overwrite another brother's registration
-    let baseMembers = members;
-    let baseSchedules = schedules;
-    let baseActiveId = activeScheduleId;
-    let baseAnnouncements = announcements;
+    isMutatingRef.current = true;
+    try {
+      let baseMembers = members;
+      let baseSchedules = schedules;
+      let baseActiveId = activeScheduleId;
+      let baseAnnouncements = announcements;
 
-    const cfg = getSavedSupabaseConfig();
-    if (cfg.enabled && cfg.url && cfg.anonKey) {
-      const res = await pullStateFromCloud();
-      if (res.ok && res.data) {
-        baseMembers = res.data.members || [];
-        baseSchedules = res.data.schedules?.length
-          ? res.data.schedules
-          : schedules;
-        baseActiveId = res.data.activeScheduleId || activeScheduleId;
-        baseAnnouncements = res.data.announcements?.length
-          ? res.data.announcements
-          : announcements;
+      const cfg = getSavedSupabaseConfig();
+      if (cfg.enabled && cfg.url && cfg.anonKey) {
+        const res = await pullStateFromCloud();
+        if (res.ok && res.data) {
+          baseMembers = res.data.members || [];
+          baseSchedules = res.data.schedules?.length
+            ? res.data.schedules
+            : schedules;
+          baseActiveId = res.data.activeScheduleId || activeScheduleId;
+          baseAnnouncements = res.data.announcements?.length
+            ? res.data.announcements
+            : announcements;
+        }
       }
-    }
 
-    const next = [...baseMembers, newMember];
-    setMembers(next);
-    setCurrentUserId(newMember.id);
-    setActiveTab('inicio');
-    triggerAutoCloudPush(next, baseSchedules, baseActiveId, baseAnnouncements);
+      const next = [...baseMembers, newMember];
+      setMembers(next);
+      setCurrentUserId(newMember.id);
+      setActiveTab('inicio');
+
+      if (cfg.enabled && cfg.url && cfg.anonKey) {
+        await pushStateToCloud({
+          members: next,
+          schedules: baseSchedules,
+          activeScheduleId: baseActiveId,
+          announcements: baseAnnouncements,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } finally {
+      isMutatingRef.current = false;
+    }
   };
 
   const handleLogout = () => {
@@ -338,10 +342,70 @@ export function App() {
     triggerAutoCloudPush(next, schedules, activeScheduleId, announcements);
   };
 
-  const handleDeleteMember = (id: string) => {
-    const next = members.filter((m) => m.id !== id);
-    setMembers(next);
-    triggerAutoCloudPush(next, schedules, activeScheduleId, announcements);
+  const handleDeleteMember = async (id: string): Promise<void> => {
+    isMutatingRef.current = true;
+    try {
+      let baseMembers = members;
+      let baseSchedules = schedules;
+      let baseActiveId = activeScheduleId;
+      let baseAnnouncements = announcements;
+
+      const cfg = getSavedSupabaseConfig();
+      if (cfg.enabled && cfg.url && cfg.anonKey) {
+        const res = await pullStateFromCloud();
+        if (res.ok && res.data) {
+          baseMembers = res.data.members || members;
+          baseSchedules = res.data.schedules?.length
+            ? res.data.schedules
+            : schedules;
+          baseActiveId = res.data.activeScheduleId || activeScheduleId;
+          baseAnnouncements = res.data.announcements?.length
+            ? res.data.announcements
+            : announcements;
+        }
+      }
+
+      // 1. Remove member completely from members list
+      const nextMembers = baseMembers.filter((m) => m.id !== id);
+
+      // 2. Also remove member from any assigned slots in all schedules
+      const nextSchedules = baseSchedules.map((sched) => ({
+        ...sched,
+        services: sched.services.map((srv) => ({
+          ...srv,
+          assignments: {
+            coordinadorServicio:
+              srv.assignments.coordinadorServicio === id
+                ? null
+                : srv.assignments.coordinadorServicio,
+            segundoCoordinador:
+              srv.assignments.segundoCoordinador === id
+                ? null
+                : srv.assignments.segundoCoordinador,
+            coordinadorNinos:
+              srv.assignments.coordinadorNinos === id
+                ? null
+                : srv.assignments.coordinadorNinos,
+            ayudas: srv.assignments.ayudas.map((a) => (a === id ? null : a)),
+          },
+        })),
+      }));
+
+      setMembers(nextMembers);
+      setSchedules(nextSchedules);
+
+      if (cfg.enabled && cfg.url && cfg.anonKey) {
+        await pushStateToCloud({
+          members: nextMembers,
+          schedules: nextSchedules,
+          activeScheduleId: baseActiveId,
+          announcements: baseAnnouncements,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } finally {
+      isMutatingRef.current = false;
+    }
   };
 
   const handleOpenServiceDetail = (serviceId: string) => {

@@ -22,6 +22,8 @@ import {
   ArrowUpDown,
   Clock,
   CheckCircle2,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 
 interface HermanosViewProps {
@@ -29,7 +31,7 @@ interface HermanosViewProps {
   members: UserMember[];
   onUpdateMember: (updated: UserMember) => void;
   onAddMember: (newMember: UserMember) => void;
-  onDeleteMember: (id: string) => void;
+  onDeleteMember: (id: string) => Promise<void>;
 }
 
 export const HermanosView: React.FC<HermanosViewProps> = ({
@@ -47,6 +49,10 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
     'todos' | 'coordinadores' | 'servidores'
   >('todos');
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Custom Delete Confirmation Modal State
+  const [memberToDelete, setMemberToDelete] = useState<UserMember | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New Brother form state
   const [newName, setNewName] = useState('');
@@ -103,7 +109,6 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
       return;
     }
 
-    // Jerarquía estricta: el Coordinador solo puede asignar Servidores; el Diácono puede asignar Coordinadores o Servidores
     const assignedRole = isDiacono ? newRole : 'servidor';
 
     const created: UserMember = {
@@ -127,6 +132,17 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
     setShowAddForm(false);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!memberToDelete) return;
+    setIsDeleting(true);
+    try {
+      await onDeleteMember(memberToDelete.id);
+      setMemberToDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Pending users waiting in the Waiting Room
   const pendingMembers = members.filter((m) => m.role === 'pendiente');
 
@@ -144,8 +160,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
   const servidoresList = matchingMembers.filter((m) => m.role === 'servidor');
 
   // Strict hierarchy check:
-  // - Diácono can manage (assign/deassign role or active status) both Coordinadores and Servidores (except himself)
-  // - Coordinador can ONLY manage (assign/deassign active status or remove) Servidores
+  // - Diácono can manage (assign/deassign role, active status, or delete) both Coordinadores and Servidores (except himself)
+  // - Coordinador can ONLY manage (assign/deassign active status or delete) Servidores
   const canManageTarget = (target: UserMember): boolean => {
     if (target.id === currentUser.id) return false;
     if (isDiacono) {
@@ -161,7 +177,6 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
     member: UserMember,
     assignedRole: 'coordinador' | 'servidor'
   ) => {
-    // Only Diácono can assign Coordinador
     if (assignedRole === 'coordinador' && !isDiacono) return;
     onUpdateMember({
       ...member,
@@ -307,19 +322,12 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (
-                    confirm(
-                      `¿Estás seguro de dar de baja a ${member.name} del departamento?`
-                    )
-                  ) {
-                    onDeleteMember(member.id);
-                  }
-                }}
-                title="Eliminar registro"
-                className="p-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 cursor-pointer"
+                onClick={() => setMemberToDelete(member)}
+                title="Eliminar cuenta permanentemente"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/25 text-[11px] font-bold cursor-pointer transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" />
+                Eliminar
               </button>
             </div>
           </div>
@@ -410,15 +418,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `¿Rechazar y eliminar la solicitud de ${pending.name}?`
-                        )
-                      ) {
-                        onDeleteMember(pending.id);
-                      }
-                    }}
+                    onClick={() => setMemberToDelete(pending)}
                     className="px-2.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
                   >
                     Rechazar
@@ -442,8 +442,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {isDiacono
-                ? 'Como DIÁCONO puedes asignar o desasignar tanto a Coordinadores como a Servidores.'
-                : 'Como COORDINADOR puedes consultar todo el directorio por categoría y asignar o desasignar únicamente a Servidores.'}
+                ? 'Como DIÁCONO puedes asignar, desasignar o eliminar cuentas tanto de Coordinadores como de Servidores.'
+                : 'Como COORDINADOR puedes consultar todo el directorio por categoría y asignar, desasignar o eliminar cuentas únicamente de Servidores.'}
             </p>
           </div>
         </div>
@@ -648,7 +648,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
             </h3>
             {!isDiacono && (
               <span className="text-[11px] text-slate-400">
-                Solo el Diácono puede asignar o desasignar Coordinadores
+                Solo el Diácono puede asignar, desasignar o eliminar Coordinadores
               </span>
             )}
           </div>
@@ -675,8 +675,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
             </h3>
             <span className="text-[11px] text-slate-400">
               {isDiacono
-                ? 'Puedes ascenderlos a Coordinador o asignar/desasignar'
-                : 'Puedes asignar o desasignar Servidores y actualizar su foto'}
+                ? 'Puedes ascenderlos a Coordinador, desasignarlos o eliminar su cuenta'
+                : 'Como Coordinador puedes asignar, desasignar o eliminar cuentas de Servidores'}
             </span>
           </div>
 
@@ -689,6 +689,100 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
               {servidoresList.map(renderMemberCard)}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ================= CUSTOM CONFIRMATION MODAL FOR DELETING ACCOUNT ================= */}
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-red-500/40 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Top Header */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-700 px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-white shrink-0" />
+                <h3 className="text-base font-extrabold">
+                  Confirmar Eliminación de Cuenta
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setMemberToDelete(null)}
+                className="p-1 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Target User Card */}
+              <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                <img
+                  src={memberToDelete.photoUrl}
+                  alt={memberToDelete.name}
+                  className="w-14 h-14 rounded-xl object-cover border-2 border-red-500/50 bg-slate-900 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="inline-block px-2 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-extrabold uppercase">
+                    Rol: {memberToDelete.role}
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">
+                    {memberToDelete.name}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {memberToDelete.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-2">
+                <p>
+                  ¿Estás seguro de que deseas eliminar permanentemente la cuenta
+                  de{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {memberToDelete.name}
+                  </strong>
+                  ?
+                </p>
+                <ul className="list-disc list-inside text-xs text-red-600 dark:text-red-400 space-y-1 font-medium">
+                  <li>
+                    Se eliminará por completo de la base de datos en Supabase.
+                  </li>
+                  <li>
+                    Dejará de existir en la aplicación y se quitará de los
+                    cuadros de servicio.
+                  </li>
+                  <li>
+                    Si tiene la aplicación abierta en su teléfono o PC, su
+                    sesión se cerrará inmediatamente.
+                  </li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setMemberToDelete(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={handleConfirmDelete}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white text-xs font-extrabold shadow-lg shadow-red-600/25 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {isDeleting
+                    ? 'Eliminando de Supabase...'
+                    : 'Sí, Eliminar Cuenta'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
