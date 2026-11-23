@@ -886,29 +886,6 @@ export function App() {
               darkMode={darkMode}
               onToggleDarkMode={() => setDarkMode(!darkMode)}
               onUpdateMember={handleUpdateMember}
-              onSyncPushCloud={() =>
-                pushStateToCloud({
-                  members,
-                  schedules,
-                  activeScheduleId,
-                  announcements,
-                  updatedAt: new Date().toISOString(),
-                })
-              }
-              onSyncPullCloud={async () => {
-                const res = await pullStateFromCloud();
-                if (res.ok && res.data) {
-                  setMembers(res.data.members || []);
-                  setSchedules(res.data.schedules || [INITIAL_SCHEDULE]);
-                  setActiveScheduleId(
-                    res.data.activeScheduleId || INITIAL_SCHEDULE.id
-                  );
-                  setAnnouncements(
-                    res.data.announcements || INITIAL_ANNOUNCEMENTS
-                  );
-                }
-                return { ok: res.ok, error: res.error };
-              }}
             />
           )}
         </main>
