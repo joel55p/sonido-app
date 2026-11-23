@@ -105,7 +105,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    // Se registra con estado 'pendiente' (Sala de espera) hasta que se le asigne rol y acceso
     const newMember: UserMember = {
       id: `m-${Date.now()}`,
       name: name.trim(),
@@ -124,8 +123,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col lg:flex-row">
-      {/* Left Hero Panel with Logo */}
-      <div className="lg:w-1/2 bg-gradient-to-br from-slate-950 via-blue-950/60 to-slate-900 p-8 lg:p-14 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800/80">
+      {/* MOBILE COMPACT HEADER (Only visible on phones/tablets < lg) */}
+      <div className="lg:hidden bg-gradient-to-b from-blue-950/80 to-slate-950 px-5 pt-6 pb-4 border-b border-slate-800/80 flex items-center gap-4">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden bg-black border border-blue-500/40 p-1.5 flex items-center justify-center shrink-0 shadow-lg">
+          <img
+            src="/logo-sonido.png"
+            alt="Logo Sonido"
+            className="w-full h-full object-contain"
+          />
+        </div>
+        <div className="min-w-0">
+          <span className="text-[10px] uppercase tracking-widest text-blue-400 font-bold block">
+            Ministerios Ebenezer
+          </span>
+          <h1 className="text-base font-extrabold tracking-tight text-white leading-tight">
+            Departamento de Sonido
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5 truncate">
+            Producción de Audio & Privilegios
+          </p>
+        </div>
+      </div>
+
+      {/* DESKTOP Left Hero Panel with Logo (Unchanged on PC lg:flex) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-950 via-blue-950/60 to-slate-900 p-8 lg:p-14 flex-col justify-between border-r border-slate-800/80">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center">
             <Headphones className="w-6 h-6 text-blue-400" />
@@ -168,14 +189,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 text-center lg:text-left">
+        <div className="text-xs text-slate-500 text-left">
           App Optimizada para PC y Teléfono Móvil • Departamento de Sonido
         </div>
       </div>
 
       {/* Right Login / Register Panel */}
-      <div className="lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-950">
-        <div className="w-full max-w-md space-y-6">
+      <div className="flex-1 lg:w-1/2 flex items-center justify-center p-4 sm:p-8 lg:p-10 bg-slate-950">
+        <div className="w-full max-w-md space-y-5">
           {/* Mode Tabs */}
           <div className="grid grid-cols-2 p-1.5 bg-slate-900 rounded-xl border border-slate-800">
             <button
@@ -220,7 +241,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {mode === 'login' ? (
             <form
               onSubmit={handleLoginSubmit}
-              className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl"
+              className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl"
             >
               <div>
                 <h3 className="text-lg font-bold text-white">
@@ -236,12 +257,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   Correo Electrónico
                 </label>
                 <input
-                  type="text"
+                  type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="tucorreo@ejemplo.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -255,13 +276,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full px-3.5 py-3 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
+                className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/25 transition-all cursor-pointer"
               >
                 Iniciar Sesión
               </button>
@@ -269,7 +290,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           ) : (
             <form
               onSubmit={handleRegisterSubmit}
-              className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl"
+              className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl"
             >
               <div>
                 <h3 className="text-lg font-bold text-white">
@@ -282,7 +303,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </div>
 
               {/* Photo Upload */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3.5">
                 <div className="w-16 h-16 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
                   {photoUrl ? (
                     <img
@@ -295,7 +316,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   )}
                 </div>
                 <div className="flex-1">
-                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-blue-300 cursor-pointer border border-slate-700 transition-colors">
+                  <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-blue-300 cursor-pointer border border-slate-700 transition-colors">
                     <Camera className="w-3.5 h-3.5" />
                     Subir Fotografía de Perfil
                     <input
@@ -306,8 +327,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     />
                   </label>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Esta foto aparecerá junto a tu nombre en el Cuadro de
-                    Privilegios.
+                    Saldrá junto a tu nombre en el Cuadro de Privilegios.
                   </p>
                 </div>
               </div>
@@ -357,7 +377,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     onChange={(e) =>
                       setPhoneDigits(sanitizeGuatemalaPhone6(e.target.value))
                     }
-                    placeholder="123456 (6 dígitos numéricos)"
+                    placeholder="123456 (6 dígitos)"
                     className="w-full px-3.5 py-2.5 bg-transparent text-sm text-white focus:outline-none font-mono tracking-wider"
                   />
                 </div>
@@ -423,7 +443,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg shadow-emerald-600/25 transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Enviar Registro y Solicitar Acceso

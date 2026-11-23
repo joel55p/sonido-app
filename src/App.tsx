@@ -729,7 +729,7 @@ export function App() {
         </header>
 
         {/* Page Body */}
-        <main className="flex-1 p-4 sm:p-6 max-w-[1700px] w-full mx-auto">
+        <main className="flex-1 p-3.5 sm:p-6 pb-24 lg:pb-6 max-w-[1700px] w-full mx-auto">
           {activeTab === 'inicio' && (
             <InicioView
               currentUser={currentUser}
@@ -848,6 +848,92 @@ export function App() {
             />
           )}
         </main>
+
+        {/* ================= MOBILE BOTTOM NAVIGATION BAR (Only on Mobile < lg) ================= */}
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-1.5 py-1.5 flex items-center justify-around text-white shadow-2xl">
+          <button
+            type="button"
+            onClick={() => setActiveTab('inicio')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+              activeTab === 'inicio'
+                ? 'text-blue-400 bg-blue-500/15'
+                : 'text-slate-400'
+            }`}
+          >
+            <Home className="w-4 h-4 mb-0.5" />
+            <span>Inicio</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('cuadro')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+              activeTab === 'cuadro'
+                ? 'text-blue-400 bg-blue-500/15'
+                : 'text-slate-400'
+            }`}
+          >
+            <Table className="w-4 h-4 mb-0.5" />
+            <span>Cuadro</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('servicios')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+              activeTab === 'servicios'
+                ? 'text-blue-400 bg-blue-500/15'
+                : 'text-slate-400'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4 mb-0.5" />
+            <span>Servicios</span>
+          </button>
+
+          {canSeeHermanosModule && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('hermanos')}
+              className={`relative flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+                activeTab === 'hermanos'
+                  ? 'text-blue-400 bg-blue-500/15'
+                  : 'text-slate-400'
+              }`}
+            >
+              <Users className="w-4 h-4 mb-0.5" />
+              <span>Hermanos</span>
+              {pendingCount > 0 && (
+                <span className="absolute top-0.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              )}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('informacion')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+              activeTab === 'informacion'
+                ? 'text-blue-400 bg-blue-500/15'
+                : 'text-slate-400'
+            }`}
+          >
+            <Megaphone className="w-4 h-4 mb-0.5" />
+            <span>Avisos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-colors ${
+              activeTab === 'settings'
+                ? 'text-blue-400 bg-blue-500/15'
+                : 'text-slate-400'
+            }`}
+          >
+            <Settings className="w-4 h-4 mb-0.5" />
+            <span>Perfil</span>
+          </button>
+        </nav>
       </div>
     </div>
   );
