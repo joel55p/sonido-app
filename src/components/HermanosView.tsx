@@ -5,6 +5,7 @@ import {
   createAvatarDataUri,
   sanitizeGuatemalaPhone6,
   isValidPhone502,
+  validateStrongPassword,
 } from '../data/initialData';
 import {
   Users,
@@ -19,6 +20,8 @@ import {
   ShieldCheck,
   AlertCircle,
   ArrowUpDown,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface HermanosViewProps {
@@ -49,6 +52,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhoneDigits, setNewPhoneDigits] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'servidor' | 'coordinador'>('servidor');
   const [formError, setFormError] = useState('');
 
@@ -69,8 +73,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
   const handleCreateMember = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    if (!newName.trim() || !newEmail.trim()) {
-      setFormError('Completa el nombre y correo electrónico.');
+    if (!newName.trim() || !newEmail.trim() || !newPassword) {
+      setFormError('Completa nombre, correo electrónico y contraseña.');
       return;
     }
 
@@ -78,6 +82,15 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
     if (!isValidPhone502(fullPhone)) {
       setFormError(
         'El teléfono debe tener el formato +502 seguido de exactamente 6 números.'
+      );
+      return;
+    }
+
+    const pwCheck = validateStrongPassword(newPassword);
+    if (!pwCheck.valid) {
+      setFormError(
+        pwCheck.message ||
+          'La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula y número.'
       );
       return;
     }
@@ -97,24 +110,31 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
       id: `m-${Date.now()}`,
       name: newName.trim(),
       email: newEmail.trim().toLowerCase(),
-      password: '123',
+      password: newPassword,
       role: assignedRole,
       photoUrl: createAvatarDataUri(newName.trim(), members.length + 1),
       phone: fullPhone,
       active: true,
+      createdAt: new Date().toISOString(),
     };
 
     onAddMember(created);
     setNewName('');
     setNewEmail('');
     setNewPhoneDigits('');
+    setNewPassword('');
     setNewRole('servidor');
     setShowAddForm(false);
   };
 
-  // Filter members by name search
-  const matchingMembers = members.filter((m) =>
-    m.name.toLowerCase().includes(searchName.trim().toLowerCase())
+  // Pending users waiting in the Waiting Room
+  const pendingMembers = members.filter((m) => m.role === 'pendiente');
+
+  // Filter approved members by name search
+  const matchingMembers = members.filter(
+    (m) =>
+      m.role !== 'pendiente' &&
+      m.name.toLowerCase().includes(searchName.trim().toLowerCase())
   );
 
   // Separate into categories: Coordinadores and Servidores
@@ -135,6 +155,19 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
       return target.role === 'servidor';
     }
     return false;
+  };
+
+  const handleApprovePending = (
+    member: UserMember,
+    assignedRole: 'coordinador' | 'servidor'
+  ) => {
+    // Only Diácono can assign Coordinador
+    if (assignedRole === 'coordinador' && !isDiacono) return;
+    onUpdateMember({
+      ...member,
+      role: assignedRole,
+      active: true,
+    });
   };
 
   const renderMemberCard = (member: UserMember) => {
@@ -297,6 +330,106 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* ================= SOLICITUDES EN SALA DE ESPERA (PENDIENTES DE ACCESO) ================= */}
+      <div className="bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-5 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 font-black">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                Solicitudes en Sala de Espera ({pendingMembers.length})
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                {isDiacono
+                  ? 'Personas que se acaban de registrar y esperan que les des acceso y les asignes su rol (Coordinador o Servidor).'
+                  : 'Personas que se acaban de registrar y esperan acceso. Como Coordinador puedes darles acceso como Servidor.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {pendingMembers.length === 0 ? (
+          <div className="p-4 rounded-xl bg-white/70 dark:bg-slate-900/70 border border-amber-500/20 text-xs text-slate-500 dark:text-slate-400 text-center">
+            No hay solicitudes pendientes en la sala de espera en este momento.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pendingMembers.map((pending) => (
+              <div
+                key={pending.id}
+                className="bg-white dark:bg-slate-900 border border-amber-500/40 rounded-2xl p-4 shadow flex flex-col justify-between gap-3"
+              >
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src={pending.photoUrl}
+                    alt={pending.name}
+                    className="w-14 h-14 rounded-xl object-cover border-2 border-amber-500 bg-slate-900 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-extrabold uppercase mb-1">
+                      Esperando Acceso
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                      {pending.name}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {pending.email}
+                    </p>
+                    <p className="text-xs font-mono text-blue-600 dark:text-blue-400">
+                      {pending.phone}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
+                  {/* Diácono can approve as Coordinador OR Servidor */}
+                  {isDiacono && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleApprovePending(pending, 'coordinador')
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow cursor-pointer transition-all"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      Dar Acceso como Coordinador
+                    </button>
+                  )}
+
+                  {/* Both Diácono and Coordinador can approve as Servidor */}
+                  <button
+                    type="button"
+                    onClick={() => handleApprovePending(pending, 'servidor')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow cursor-pointer transition-all"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Dar Acceso como Servidor
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `¿Rechazar y eliminar la solicitud de ${pending.name}?`
+                        )
+                      ) {
+                        onDeleteMember(pending.id);
+                      }
+                    }}
+                    className="px-2.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
@@ -305,7 +438,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
           </div>
           <div>
             <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              Directorio de Hermanos de Sonido
+              Directorio de Hermanos con Acceso
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               {isDiacono
@@ -327,8 +460,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
           {showAddForm
             ? 'Cerrar Formulario'
             : isDiacono
-            ? 'Asignar Nuevo Coordinador / Servidor'
-            : 'Asignar Nuevo Servidor'}
+            ? 'Agregar Directamente Coordinador / Servidor'
+            : 'Agregar Directamente Servidor'}
         </button>
       </div>
 
@@ -340,8 +473,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
         >
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
             {isDiacono
-              ? 'Registrar y Asignar Nuevo Hermano (Coordinador o Servidor)'
-              : 'Registrar y Asignar Nuevo Servidor'}
+              ? 'Registrar y Dar Acceso Directo (Coordinador o Servidor)'
+              : 'Registrar y Dar Acceso Directo (Servidor)'}
           </h3>
 
           {formError && (
@@ -351,7 +484,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Nombre Completo
@@ -375,7 +508,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                 required
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="hermano@sonido.com"
+                placeholder="hermano@correo.com"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
               />
             </div>
@@ -405,6 +538,20 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Contraseña Segura
+              </label>
+              <input
+                type="text"
+                required
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Ej: Sonido2026"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Categoría / Rol
               </label>
               {isDiacono ? (
@@ -422,7 +569,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                 <input
                   type="text"
                   disabled
-                  value="Servidor (Asignado por Coordinador)"
+                  value="Servidor"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-xs text-slate-500"
                 />
               )}
@@ -435,7 +582,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              Guardar y Asignar
+              Guardar y Dar Acceso
             </button>
           </div>
         </form>
@@ -508,7 +655,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
           {coordinadoresList.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-500">
-              No se encontraron coordinadores con ese nombre.
+              No hay coordinadores registrados aún.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -535,7 +682,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
           {servidoresList.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-500">
-              No se encontraron servidores con ese nombre.
+              No hay servidores registrados aún.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

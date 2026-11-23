@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   UserMember,
   PrivilegeSchedule,
@@ -16,6 +16,7 @@ import {
   getSavedSupabaseConfig,
 } from './utils/cloudSync';
 import { AuthScreen } from './components/AuthScreen';
+import { WaitingApprovalScreen } from './components/WaitingApprovalScreen';
 import { InicioView } from './components/InicioView';
 import { CuadroPrivilegiosView } from './components/CuadroPrivilegiosView';
 import { ServiciosAttendanceView } from './components/ServiciosAttendanceView';
@@ -39,44 +40,13 @@ import {
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
-  MEMBERS: 'sonido_ebenezer_members_v3',
-  SCHEDULES: 'sonido_ebenezer_schedules_v3',
-  ACTIVE_SCHED_ID: 'sonido_ebenezer_active_sched_v3',
-  ANNOUNCEMENTS: 'sonido_ebenezer_announcements_v3',
-  CURRENT_USER_ID: 'sonido_ebenezer_current_user_v3',
-  DARK_MODE: 'sonido_ebenezer_dark_mode_v3',
+  MEMBERS: 'sonido_ebenezer_members_prod_v1',
+  SCHEDULES: 'sonido_ebenezer_schedules_prod_v1',
+  ACTIVE_SCHED_ID: 'sonido_ebenezer_active_sched_prod_v1',
+  ANNOUNCEMENTS: 'sonido_ebenezer_announcements_prod_v1',
+  CURRENT_USER_ID: 'sonido_ebenezer_current_user_prod_v1',
+  DARK_MODE: 'sonido_ebenezer_dark_mode_prod_v1',
 };
-
-// Ensures the core example accounts always keep their intended role
-// even if someone registered with that email earlier.
-function enforceExampleRoles(list: UserMember[]): UserMember[] {
-  const fixedList = list.map((m) => {
-    const mail = m.email.trim().toLowerCase();
-    if (mail === 'diacono@sonido.com') {
-      return { ...m, role: 'diacono' as const };
-    }
-    if (
-      mail === 'coordinador@sonido.com' ||
-      mail === 'coordinador2@sonido.com' ||
-      mail === 'coordninos@sonido.com'
-    ) {
-      return { ...m, role: 'coordinador' as const };
-    }
-    return m;
-  });
-
-  // Also ensure none of INITIAL_MEMBERS are missing
-  INITIAL_MEMBERS.forEach((seed) => {
-    const exists = fixedList.some(
-      (m) => m.email.toLowerCase() === seed.email.toLowerCase()
-    );
-    if (!exists) {
-      fixedList.push(seed);
-    }
-  });
-
-  return fixedList;
-}
 
 type NavTab =
   | 'inicio'
@@ -103,17 +73,15 @@ export function App() {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, String(darkMode));
   }, [darkMode]);
 
-  // 2. Members State (Example users with guaranteed roles)
+  // 2. Members State (100% real registered users)
   const [members, setMembers] = useState<UserMember[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MEMBERS);
-      if (saved) {
-        return enforceExampleRoles(JSON.parse(saved));
-      }
+      if (saved) return JSON.parse(saved);
     } catch {
       // fallback
     }
-    return enforceExampleRoles(INITIAL_MEMBERS);
+    return INITIAL_MEMBERS;
   });
 
   // 3. Weekly Privilege Schedules State
@@ -144,30 +112,9 @@ export function App() {
     return INITIAL_ANNOUNCEMENTS;
   });
 
-  // 5. Logged-in User State (default to m-coordinador if previously logged in as Coordinador Ejemplo)
+  // 5. Logged-in User State
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
-    const savedV3 = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-    if (savedV3) return savedV3;
-    // Check if user was already logged in under v2
-    const savedV2 = localStorage.getItem('sonido_ebenezer_current_user_v2');
-    if (savedV2) {
-      try {
-        const rawV2Members = localStorage.getItem('sonido_ebenezer_members_v2');
-        if (rawV2Members) {
-          const parsed: UserMember[] = JSON.parse(rawV2Members);
-          const prevUser = parsed.find((u) => u.id === savedV2);
-          if (prevUser) {
-            const matchedSeed = INITIAL_MEMBERS.find(
-              (s) => s.email.toLowerCase() === prevUser.email.toLowerCase()
-            );
-            if (matchedSeed) return matchedSeed.id;
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return null;
+    return localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
   });
 
   // Navigation State
@@ -206,20 +153,33 @@ export function App() {
     }
   }, [currentUserId]);
 
-  // Auto-pull from Supabase on startup if configured
-  useEffect(() => {
+  const syncFromCloud = useCallback(async () => {
     const cfg = getSavedSupabaseConfig();
     if (cfg.enabled && cfg.url && cfg.anonKey) {
-      pullStateFromCloud().then((res) => {
-        if (res.ok && res.data) {
-          setMembers(enforceExampleRoles(res.data.members));
+      const res = await pullStateFromCloud();
+      if (res.ok && res.data) {
+        setMembers(res.data.members || []);
+        if (res.data.schedules?.length) {
           setSchedules(res.data.schedules);
+        }
+        if (res.data.activeScheduleId) {
           setActiveScheduleId(res.data.activeScheduleId);
+        }
+        if (res.data.announcements?.length) {
           setAnnouncements(res.data.announcements);
         }
-      });
+      }
     }
   }, []);
+
+  // Auto-pull from Supabase on startup and every 12 seconds so all devices stay in sync
+  useEffect(() => {
+    syncFromCloud();
+    const interval = setInterval(() => {
+      syncFromCloud();
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [syncFromCloud]);
 
   const currentUser = React.useMemo(() => {
     if (!currentUserId) return null;
@@ -255,26 +215,37 @@ export function App() {
 
   // Handlers
   const handleLogin = (member: UserMember) => {
-    const fixed = enforceExampleRoles(members);
-    setMembers(fixed);
-    const updatedTarget =
-      fixed.find((m) => m.id === member.id) ||
-      fixed.find((m) => m.email.toLowerCase() === member.email.toLowerCase()) ||
-      member;
-    setCurrentUserId(updatedTarget.id);
+    setCurrentUserId(member.id);
     setActiveTab('inicio');
   };
 
-  const handleRegister = (newMember: UserMember) => {
-    const next = enforceExampleRoles([...members, newMember]);
+  const handleRegister = async (newMember: UserMember) => {
+    // First pull latest from cloud if available so we never overwrite another brother's registration
+    let baseMembers = members;
+    let baseSchedules = schedules;
+    let baseActiveId = activeScheduleId;
+    let baseAnnouncements = announcements;
+
+    const cfg = getSavedSupabaseConfig();
+    if (cfg.enabled && cfg.url && cfg.anonKey) {
+      const res = await pullStateFromCloud();
+      if (res.ok && res.data) {
+        baseMembers = res.data.members || [];
+        baseSchedules = res.data.schedules?.length
+          ? res.data.schedules
+          : schedules;
+        baseActiveId = res.data.activeScheduleId || activeScheduleId;
+        baseAnnouncements = res.data.announcements?.length
+          ? res.data.announcements
+          : announcements;
+      }
+    }
+
+    const next = [...baseMembers, newMember];
     setMembers(next);
-    const created =
-      next.find(
-        (m) => m.email.toLowerCase() === newMember.email.toLowerCase()
-      ) || newMember;
-    setCurrentUserId(created.id);
+    setCurrentUserId(newMember.id);
     setActiveTab('inicio');
-    triggerAutoCloudPush(next, schedules, activeScheduleId, announcements);
+    triggerAutoCloudPush(next, baseSchedules, baseActiveId, baseAnnouncements);
   };
 
   const handleLogout = () => {
@@ -348,13 +319,7 @@ export function App() {
     setMobileSidebarOpen(false);
   };
 
-  const handleResetDemoData = () => {
-    setMembers(INITIAL_MEMBERS);
-    setSchedules([INITIAL_SCHEDULE]);
-    setActiveScheduleId(INITIAL_SCHEDULE.id);
-    setAnnouncements(INITIAL_ANNOUNCEMENTS);
-  };
-
+  // 1. Not logged in -> AuthScreen
   if (!currentUser) {
     return (
       <AuthScreen
@@ -365,8 +330,24 @@ export function App() {
     );
   }
 
+  // 2. Logged in, but still in Waiting Room (role === 'pendiente' or !active) -> WaitingApprovalScreen
+  if (currentUser.role === 'pendiente' || !currentUser.active) {
+    return (
+      <WaitingApprovalScreen
+        currentUser={currentUser}
+        onRefreshStatus={syncFromCloud}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // 3. Approved User (Diácono, Coordinador, or Servidor) -> Full Application
   const canSeeHermanosModule =
     currentUser.role === 'coordinador' || currentUser.role === 'diacono';
+  const pendingCount = members.filter((m) => m.role === 'pendiente').length;
+  const approvedMembers = members.filter(
+    (m) => m.role !== 'pendiente' && m.active
+  );
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
@@ -579,9 +560,15 @@ export function App() {
                 <Users className="w-4 h-4 shrink-0" />
                 <span>Hermanos</span>
               </span>
-              <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 text-[10px]">
-                {members.length}
-              </span>
+              {pendingCount > 0 ? (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-extrabold text-[10px] animate-pulse">
+                  {pendingCount} en espera
+                </span>
+              ) : (
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 text-[10px]">
+                  {approvedMembers.length}
+                </span>
+              )}
             </button>
           )}
 
@@ -716,7 +703,7 @@ export function App() {
             <InicioView
               currentUser={currentUser}
               activeSchedule={activeSchedule}
-              members={members}
+              members={approvedMembers}
               announcements={announcements}
               onNavigateToTab={setActiveTab}
               onOpenServiceDetail={handleOpenServiceDetail}
@@ -728,7 +715,7 @@ export function App() {
               currentUser={currentUser}
               schedules={schedules}
               activeSchedule={activeSchedule}
-              members={members}
+              members={approvedMembers}
               onSelectSchedule={setActiveScheduleId}
               onUpdateSchedule={handleUpdateSchedule}
               onCreateSchedule={handleCreateSchedule}
@@ -743,7 +730,7 @@ export function App() {
               currentUser={currentUser}
               activeSchedule={activeSchedule}
               selectedServiceId={selectedServiceId}
-              members={members}
+              members={approvedMembers}
               onSelectService={setSelectedServiceId}
               onSaveServiceAttendance={handleSaveServiceAttendance}
             />
@@ -816,14 +803,17 @@ export function App() {
               onSyncPullCloud={async () => {
                 const res = await pullStateFromCloud();
                 if (res.ok && res.data) {
-                  setMembers(enforceExampleRoles(res.data.members));
-                  setSchedules(res.data.schedules);
-                  setActiveScheduleId(res.data.activeScheduleId);
-                  setAnnouncements(res.data.announcements);
+                  setMembers(res.data.members || []);
+                  setSchedules(res.data.schedules || [INITIAL_SCHEDULE]);
+                  setActiveScheduleId(
+                    res.data.activeScheduleId || INITIAL_SCHEDULE.id
+                  );
+                  setAnnouncements(
+                    res.data.announcements || INITIAL_ANNOUNCEMENTS
+                  );
                 }
                 return { ok: res.ok, error: res.error };
               }}
-              onResetDemoData={handleResetDemoData}
             />
           )}
         </main>

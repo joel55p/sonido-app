@@ -43,103 +43,53 @@ export function isValidPhone502(phone: string): boolean {
   return /^\+502\d{6}$/.test(phone.trim());
 }
 
-interface RawMemberSeed {
-  id: string;
-  name: string;
-  role: 'diacono' | 'coordinador' | 'servidor';
-  email: string;
-  phone: string;
+export interface PasswordValidationResult {
+  valid: boolean;
+  hasMinLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasNumber: boolean;
+  message?: string;
 }
 
-const RAW_MEMBERS: RawMemberSeed[] = [
-  // 3 Usuarios Principales de Ejemplo para probar cada rol con correo y contraseña
-  {
-    id: 'm-diacono',
-    name: 'Diácono Ejemplo',
-    role: 'diacono',
-    email: 'diacono@sonido.com',
-    phone: '+502100001',
-  },
-  {
-    id: 'm-coordinador',
-    name: 'Coordinador Ejemplo',
-    role: 'coordinador',
-    email: 'coordinador@sonido.com',
-    phone: '+502100002',
-  },
-  {
-    id: 'm-servidor',
-    name: 'Servidor Ejemplo',
-    role: 'servidor',
-    email: 'servidor@sonido.com',
-    phone: '+502100003',
-  },
+/**
+ * Exige una contraseña segura (mínimo 8 caracteres, al menos 1 mayúscula, 1 minúscula y 1 número).
+ */
+export function validateStrongPassword(password: string): PasswordValidationResult {
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /\d/.test(password);
 
-  // Usuarios adicionales de ejemplo (sin nombres reales) para mostrar la estructura del cuadro
-  {
-    id: 'm-coord-2',
-    name: 'Segundo Coord Ejemplo',
-    role: 'coordinador',
-    email: 'coordinador2@sonido.com',
-    phone: '+502100004',
-  },
-  {
-    id: 'm-coord-ninos',
-    name: 'Coord Niños Ejemplo',
-    role: 'coordinador',
-    email: 'coordninos@sonido.com',
-    phone: '+502100005',
-  },
-  {
-    id: 'm-serv-2',
-    name: 'Servidor Ejemplo 2',
-    role: 'servidor',
-    email: 'servidor2@sonido.com',
-    phone: '+502100006',
-  },
-  {
-    id: 'm-serv-3',
-    name: 'Servidor Ejemplo 3',
-    role: 'servidor',
-    email: 'servidor3@sonido.com',
-    phone: '+502100007',
-  },
-  {
-    id: 'm-serv-4',
-    name: 'Servidor Ejemplo 4',
-    role: 'servidor',
-    email: 'servidor4@sonido.com',
-    phone: '+502100008',
-  },
-  {
-    id: 'm-serv-5',
-    name: 'Servidor Ejemplo 5',
-    role: 'servidor',
-    email: 'servidor5@sonido.com',
-    phone: '+502100009',
-  },
-  {
-    id: 'm-serv-6',
-    name: 'Servidor Ejemplo 6',
-    role: 'servidor',
-    email: 'servidor6@sonido.com',
-    phone: '+502100010',
-  },
-];
+  const valid = hasMinLength && hasUppercase && hasLowercase && hasNumber;
+  let message: string | undefined;
+  if (!valid) {
+    message =
+      'La contraseña debe tener al menos 8 caracteres, incluir una letra mayúscula, una minúscula y un número.';
+  }
 
-export const INITIAL_MEMBERS: UserMember[] = RAW_MEMBERS.map((m, idx) => ({
-  id: m.id,
-  name: m.name,
-  email: m.email,
-  password: '123',
-  role: m.role,
-  photoUrl: createAvatarDataUri(m.name, idx),
-  phone: m.phone,
-  active: true,
-}));
+  return {
+    valid,
+    hasMinLength,
+    hasUppercase,
+    hasLowercase,
+    hasNumber,
+    message,
+  };
+}
+
+// Base de usuarios 100% limpia para producción real
+export const INITIAL_MEMBERS: UserMember[] = [];
+
+const emptyAssignments = () => ({
+  coordinadorServicio: null,
+  segundoCoordinador: null,
+  coordinadorNinos: null,
+  ayudas: [null, null, null, null, null, null] as (string | null)[],
+});
 
 export const INITIAL_SCHEDULE: PrivilegeSchedule = {
-  id: 'sched-ejemplo-semanal',
+  id: 'sched-produccion-1',
   title: 'Cuadro de Privilegios',
   dateFrom: 'lunes 23/noviembre/2026',
   dateTo: 'domingo 29/noviembre/2026',
@@ -147,7 +97,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
     'Ahora pues, si están animados por estar en Cristo, si están consolados por su amor, si comparten juntos en el Espíritu, si tienen compasión y simpatía, entonces completen mi alegría teniendo un mismo modo de pensar y amar, permaneciendo espiritualmente unidos y con un mismo propósito',
   verseRef: 'VBL Filipenses 2:1-2',
   yearTheme: '2026 Año del Deleite',
-  createdAt: '2026-11-22T18:00:00.000Z',
+  createdAt: new Date().toISOString(),
   isActive: true,
   attendance: {},
   services: [
@@ -159,19 +109,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Servicio Familiar',
       time: '5:00 p.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          null,
-          null,
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-mar-damas',
@@ -180,12 +118,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Servicio Damas',
       time: '2:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: null,
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: [null, null, null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-mar-voces',
@@ -194,12 +127,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Ensayo Voces',
       time: '6:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: null,
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: [null, null, null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-mar-doctrina',
@@ -208,12 +136,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Escuela Doctrina',
       time: '6:30 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: null,
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: [null, null, null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-mie-intercesion',
@@ -222,12 +145,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Intercesión',
       time: '8:30 a.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: null,
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: [null, null, null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-mie-devocional',
@@ -236,19 +154,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Servicio Devocional',
       time: '5:00 p.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: null,
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-jue-ensayo-general',
@@ -257,19 +163,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Ensayo General',
       time: '6:30 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          null,
-          null,
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-vie-intercesion',
@@ -278,12 +172,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Intercesión',
       time: '8:30 a.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: [null, null, null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-vie-devocional',
@@ -292,19 +181,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Servicio Devocional',
       time: '5:00 p.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: null,
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
 
     // ================= BLOQUE 2: SÁBADO Y DOMINGO =================
@@ -315,12 +192,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Prejuveniles',
       time: '8:00 a.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: ['m-servidor', 'm-serv-2', null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-sab-ensayo-ninos',
@@ -329,12 +201,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Ensayo de niños',
       time: '2:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: ['m-serv-3', 'm-serv-4', null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-sab-gibbor',
@@ -343,12 +210,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Gibbor',
       time: '12:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: ['m-servidor', 'm-serv-2', 'm-serv-3', null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-sab-ensayo-general',
@@ -357,12 +219,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Ensayo General',
       time: '5:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: null,
-        coordinadorNinos: null,
-        ayudas: ['m-serv-4', 'm-serv-5', null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-sab-ensayo-prejuveniles',
@@ -371,12 +228,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Ensayo de prejuveniles',
       time: '5:00 p.m.',
       uniform: 'Chaleco y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: null,
-        segundoCoordinador: null,
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: ['m-servidor', 'm-serv-2', null, null, null, null],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-dom-primero',
@@ -385,19 +237,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Primer Servicio',
       time: '6:30 a.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-dom-segundo',
@@ -406,19 +246,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Segundo Servicio',
       time: '10:00 a.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-dom-tercero',
@@ -427,19 +255,7 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Tercer Servicio',
       time: '1:00 p.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
     {
       id: 'srv-dom-cuarto',
@@ -448,46 +264,22 @@ export const INITIAL_SCHEDULE: PrivilegeSchedule = {
       name: 'Cuarto Servicio',
       time: '5:00 p.m.',
       uniform: 'Camisa y gafete – uniforme negro',
-      assignments: {
-        coordinadorServicio: 'm-coordinador',
-        segundoCoordinador: 'm-coord-2',
-        coordinadorNinos: 'm-coord-ninos',
-        ayudas: [
-          'm-servidor',
-          'm-serv-2',
-          'm-serv-3',
-          'm-serv-4',
-          'm-serv-5',
-          'm-serv-6',
-        ],
-      },
+      assignments: emptyAssignments(),
     },
   ],
 };
 
 export const INITIAL_ANNOUNCEMENTS: Announcement[] = [
   {
-    id: 'ann-1',
-    title: 'Lineamientos de Uniforme y Puntualidad de la Semana',
-    category: 'Uniforme',
+    id: 'ann-bienvenida',
+    title: 'Bienvenidos a la Plataforma Oficial del Departamento de Sonido',
+    category: 'General',
     content:
-      'Bendiciones hermanos del Departamento de Sonido. Les recordamos verificar en el Cuadro de Privilegios si en su servicio corresponde "Camisa y gafete – uniforme negro" o "Chaleco y gafete – uniforme negro". Por favor presentarse 30 minutos antes del inicio de cada servicio para prueba de línea y oración.',
-    authorId: 'm-diacono',
-    authorName: 'Diácono Ejemplo',
+      'Bendiciones hermanos del Departamento de Sonido — Producción de Audio (Ministerios Ebenezer). Desde esta plataforma podrán consultar el Cuadro de Privilegios semanal de Lunes a Domingo, revisar el uniforme correspondiente a cada servicio y mantenerse informados de los comunicados oficiales.',
+    authorId: 'system',
+    authorName: 'Departamento de Sonido',
     authorRole: 'diacono',
-    createdAt: '2026-11-22T15:30:00.000Z',
+    createdAt: new Date().toISOString(),
     pinned: true,
-  },
-  {
-    id: 'ann-2',
-    title: 'Ensayo General de Jueves y Cuidado de Equipos',
-    category: 'Capacitación',
-    content:
-      'A todos los coordinadores de servicio y ayudas: al finalizar cada turno y el Ensayo General, por favor dejar las baterías recargables en su estación de carga y anotar en los comentarios generales de asistencia del servicio si algún micrófono o cable presentó novedad.',
-    authorId: 'm-coordinador',
-    authorName: 'Coordinador Ejemplo',
-    authorRole: 'coordinador',
-    createdAt: '2026-11-22T17:00:00.000Z',
-    pinned: false,
   },
 ];

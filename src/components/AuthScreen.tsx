@@ -4,6 +4,7 @@ import {
   createAvatarDataUri,
   sanitizeGuatemalaPhone6,
   isValidPhone502,
+  validateStrongPassword,
 } from '../data/initialData';
 import { processUploadedPhoto } from '../utils/mediaAndPdf';
 import {
@@ -13,6 +14,8 @@ import {
   Camera,
   AlertCircle,
   CheckCircle2,
+  Check,
+  Lock,
 } from 'lucide-react';
 
 interface AuthScreenProps {
@@ -30,10 +33,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  // Stores only the 6 numeric digits after +502
   const [phoneDigits, setPhoneDigits] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [error, setError] = useState('');
+
+  const pwCheck = validateStrongPassword(password);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,7 +65,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       );
       return;
     }
-    if (found.password && found.password !== password) {
+    if (found.password !== password) {
       setError('Contraseña incorrecta.');
       return;
     }
@@ -72,7 +76,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     e.preventDefault();
     setError('');
 
-    if (!name.trim() || !email.trim() || !password.trim()) {
+    if (!name.trim() || !email.trim() || !password) {
       setError('Por favor completa Nombre Completo, Correo y Contraseña.');
       return;
     }
@@ -85,6 +89,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
+    if (!pwCheck.valid) {
+      setError(
+        pwCheck.message ||
+          'La contraseña no cumple con los requisitos de seguridad.'
+      );
+      return;
+    }
+
     const exists = members.some(
       (m) => m.email.toLowerCase() === email.trim().toLowerCase()
     );
@@ -93,18 +105,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    // Todo registro nuevo ingresa con rol base 'servidor'; el rol de Coordinador o Diácono
-    // se asigna únicamente desde la base de datos (Supabase) o por el Diácono administrador.
+    // Se registra con estado 'pendiente' (Sala de espera) hasta que se le asigne rol y acceso
     const newMember: UserMember = {
       id: `m-${Date.now()}`,
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      password: password.trim(),
-      role: 'servidor',
+      password: password,
+      role: 'pendiente',
       photoUrl:
         photoUrl || createAvatarDataUri(name.trim(), members.length + 1),
       phone: fullPhone,
-      active: true,
+      active: false,
+      createdAt: new Date().toISOString(),
     };
 
     onRegister(newMember);
@@ -161,7 +173,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </div>
       </div>
 
-      {/* Right Login / Register Panel (SOLO INICIAR SESIÓN Y REGISTRARSE) */}
+      {/* Right Login / Register Panel */}
       <div className="lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-950">
         <div className="w-full max-w-md space-y-6">
           {/* Mode Tabs */}
@@ -221,14 +233,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Correo Electrónico o Usuario
+                  Correo Electrónico
                 </label>
                 <input
                   type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ejemplo@sonido.com"
+                  placeholder="tucorreo@ejemplo.com"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -261,11 +273,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             >
               <div>
                 <h3 className="text-lg font-bold text-white">
-                  Registro de Usuario
+                  Solicitud de Registro
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Completa tus datos para crear tu cuenta en el Departamento de
-                  Sonido.
+                  Al registrarte pasarás a una sala de espera mientras se te
+                  autoriza el acceso y se te asigna tu rol correspondiente.
                 </p>
               </div>
 
@@ -323,7 +335,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@sonido.com"
+                  placeholder="tucorreo@ejemplo.com"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -355,17 +367,58 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Contraseña de Acceso
+                <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-blue-400" />
+                  Contraseña Segura
                 </label>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Mínimo 8 caracteres, mayúscula, minúscula y número"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white focus:outline-none focus:border-blue-500"
                 />
+
+                {/* Password requirements checklist */}
+                <div className="mt-2 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800/80 grid grid-cols-2 gap-1.5 text-[11px]">
+                  <span
+                    className={`flex items-center gap-1 ${
+                      pwCheck.hasMinLength
+                        ? 'text-emerald-400 font-semibold'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <Check className="w-3 h-3 shrink-0" />8 o más caracteres
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 ${
+                      pwCheck.hasUppercase
+                        ? 'text-emerald-400 font-semibold'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <Check className="w-3 h-3 shrink-0" />Al menos 1 mayúscula
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 ${
+                      pwCheck.hasLowercase
+                        ? 'text-emerald-400 font-semibold'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <Check className="w-3 h-3 shrink-0" />Al menos 1 minúscula
+                  </span>
+                  <span
+                    className={`flex items-center gap-1 ${
+                      pwCheck.hasNumber
+                        ? 'text-emerald-400 font-semibold'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <Check className="w-3 h-3 shrink-0" />Al menos 1 número
+                  </span>
+                </div>
               </div>
 
               <button
@@ -373,7 +426,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg shadow-emerald-600/25 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Registrarse
+                Enviar Registro y Solicitar Acceso
               </button>
             </form>
           )}

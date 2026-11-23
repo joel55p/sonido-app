@@ -4,6 +4,7 @@ import { processUploadedPhoto } from '../utils/mediaAndPdf';
 import {
   sanitizeGuatemalaPhone6,
   isValidPhone502,
+  validateStrongPassword,
 } from '../data/initialData';
 import {
   getSavedSupabaseConfig,
@@ -21,7 +22,6 @@ import {
   CloudUpload,
   CloudDownload,
   Copy,
-  RotateCcw,
   AlertCircle,
 } from 'lucide-react';
 
@@ -32,7 +32,6 @@ interface SettingsViewProps {
   onUpdateMember: (updated: UserMember) => void;
   onSyncPushCloud: () => Promise<{ ok: boolean; error?: string }>;
   onSyncPullCloud: () => Promise<{ ok: boolean; error?: string }>;
-  onResetDemoData: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -42,7 +41,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateMember,
   onSyncPushCloud,
   onSyncPullCloud,
-  onResetDemoData,
 }) => {
   const isDiacono = currentUser.role === 'diacono';
 
@@ -58,7 +56,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [phoneDigits, setPhoneDigits] = useState(() =>
     extractDigits(currentUser.phone)
   );
-  const [password, setPassword] = useState(currentUser.password || '123');
+  const [password, setPassword] = useState(currentUser.password || '');
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState('');
 
@@ -66,7 +64,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setName(currentUser.name);
     setEmail(currentUser.email);
     setPhoneDigits(extractDigits(currentUser.phone));
-    setPassword(currentUser.password || '123');
+    setPassword(currentUser.password || '');
   }, [currentUser]);
 
   // Cloud DB (Supabase) Config - Only visible to Diácono
@@ -102,12 +100,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
+    const pwCheck = validateStrongPassword(password);
+    if (!pwCheck.valid) {
+      setProfileError(
+        pwCheck.message ||
+          'La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula y número.'
+      );
+      return;
+    }
+
     onUpdateMember({
       ...currentUser,
       name: name.trim() || currentUser.name,
       email: email.trim() || currentUser.email,
       phone: fullPhone,
-      password: password.trim() || '123',
+      password: password,
     });
     setProfileSaved(true);
     setTimeout(() => setProfileSaved(false), 3000);
@@ -221,13 +228,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                  Contraseña de Acceso
+                  Contraseña Segura
                 </label>
                 <input
                   type="text"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres, Mayús, minús y número"
                   className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
                 />
               </div>
@@ -295,27 +303,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </button>
           </div>
-
-          {isDiacono && (
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    confirm(
-                      '¿Deseas restaurar los usuarios y el cuadro de ejemplo inicial?'
-                    )
-                  ) {
-                    onResetDemoData();
-                  }
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-red-500/10 text-slate-600 dark:text-slate-400 hover:text-red-500 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Restaurar Datos de Ejemplo
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

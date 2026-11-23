@@ -1,4 +1,4 @@
-export type Role = 'diacono' | 'coordinador' | 'servidor';
+export type Role = 'diacono' | 'coordinador' | 'servidor' | 'pendiente';
 
 export type AttendanceStatus = 'pendiente' | 'asistio' | 'no_asistio' | 'excusa' | 'tarde';
 
@@ -11,6 +11,7 @@ export interface UserMember {
   photoUrl: string;
   phone: string; // Formato estricto: +502 seguido de 6 dígitos numéricos
   active: boolean;
+  createdAt?: string;
 }
 
 export interface ServiceAssignment {
@@ -38,7 +39,7 @@ export interface ServiceAttendance {
 export interface ServiceColumn {
   id: string;
   dayGroup: 'Lunes' | 'Martes' | 'Miércoles' | 'Jueves' | 'Viernes' | 'Sábado' | 'Domingo';
-  block: 'weekday' | 'weekend'; // 'weekday' = Lunes a Viernes table, 'weekend' = Sábado y Domingo table
+  block: 'weekday' | 'weekend';
   name: string;
   time: string;
   uniform: string;
