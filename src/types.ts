@@ -1,4 +1,70 @@
-export type Role = 'diacono' | 'coordinador' | 'servidor' | 'pendiente';
+export type Role =
+  | 'diacono'
+  | 'ayuda_directa'
+  | 'ayuda_diacono'
+  | 'coordinador'
+  | 'servidor'
+  | 'pendiente';
+
+export function getRoleLabel(role: Role): string {
+  switch (role) {
+    case 'diacono':
+      return 'Diácono';
+    case 'ayuda_directa':
+      return 'Ayuda Directa del Diácono';
+    case 'ayuda_diacono':
+      return 'Ayuda de Diácono';
+    case 'coordinador':
+      return 'Coordinador';
+    case 'servidor':
+      return 'Servidor';
+    case 'pendiente':
+      return 'Pendiente';
+  }
+}
+
+/**
+ * Rol 1 (Diácono) y Rol 2 (Ayuda directa del Diácono) son los únicos que pueden crear, editar o eliminar Cuadros de Privilegios.
+ */
+export function canEditSchedules(role: Role): boolean {
+  return role === 'diacono' || role === 'ayuda_directa';
+}
+
+/**
+ * Rol 1 (Diácono), Rol 2 (Ayuda directa del Diácono) y Rol 3 (Ayudas de Diácono) pueden aceptar hermanos en espera y gestionar usuarios.
+ * Los Coordinadores (Rol 4) NO pueden dar acceso a los hermanos.
+ */
+export function canManageBrothers(role: Role): boolean {
+  return (
+    role === 'diacono' ||
+    role === 'ayuda_directa' ||
+    role === 'ayuda_diacono'
+  );
+}
+
+/**
+ * Rol 1, Rol 2, Rol 3 y Rol 4 (Coordinadores) pueden pasar asistencia en Servicios y exportar el reporte PDF del servicio.
+ */
+export function canTakeServiceAttendance(role: Role): boolean {
+  return (
+    role === 'diacono' ||
+    role === 'ayuda_directa' ||
+    role === 'ayuda_diacono' ||
+    role === 'coordinador'
+  );
+}
+
+/**
+ * Rol 1, Rol 2, Rol 3 y Rol 4 pueden publicar avisos en el muro de Información.
+ */
+export function canPostAnnouncements(role: Role): boolean {
+  return (
+    role === 'diacono' ||
+    role === 'ayuda_directa' ||
+    role === 'ayuda_diacono' ||
+    role === 'coordinador'
+  );
+}
 
 export type AttendanceStatus = 'pendiente' | 'asistio' | 'no_asistio' | 'excusa' | 'tarde';
 

@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { Announcement, UserMember } from '../types';
+import {
+  Announcement,
+  UserMember,
+  canPostAnnouncements,
+  getRoleLabel,
+} from '../types';
 import {
   Megaphone,
   Plus,
@@ -25,8 +30,7 @@ export const InformacionView: React.FC<InformacionViewProps> = ({
   onDeleteAnnouncement,
   onTogglePin,
 }) => {
-  const canPost =
-    currentUser.role === 'diacono' || currentUser.role === 'coordinador';
+  const canPost = canPostAnnouncements(currentUser.role);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<
@@ -216,13 +220,13 @@ export const InformacionView: React.FC<InformacionViewProps> = ({
                   {ann.category}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  {ann.authorRole === 'diacono' ? (
+                  {ann.authorRole === 'diacono' ||
+                  ann.authorRole === 'ayuda_directa' ? (
                     <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
                   ) : (
                     <Sliders className="w-3.5 h-3.5 text-blue-500" />
                   )}
-                  {ann.authorName} (
-                  {ann.authorRole === 'diacono' ? 'Diácono' : 'Coordinador'})
+                  {ann.authorName} ({getRoleLabel(ann.authorRole)})
                 </span>
               </div>
 
@@ -246,6 +250,7 @@ export const InformacionView: React.FC<InformacionViewProps> = ({
                       <Pin className="w-3.5 h-3.5" />
                     </button>
                     {(currentUser.role === 'diacono' ||
+                      currentUser.role === 'ayuda_directa' ||
                       ann.authorId === currentUser.id) && (
                       <button
                         type="button"

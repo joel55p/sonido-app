@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserMember } from '../types';
+import { UserMember, getRoleLabel } from '../types';
 import { processUploadedPhoto } from '../utils/mediaAndPdf';
 import {
   sanitizeGuatemalaPhone6,
@@ -113,7 +113,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </h2>
             </div>
             <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase">
-              Rol: {currentUser.role}
+              Rol: {getRoleLabel(currentUser.role)}
             </span>
           </div>
 

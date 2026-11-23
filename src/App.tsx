@@ -4,6 +4,8 @@ import {
   PrivilegeSchedule,
   Announcement,
   ServiceAttendance,
+  canManageBrothers,
+  getRoleLabel,
 } from './types';
 import {
   INITIAL_MEMBERS,
@@ -436,9 +438,8 @@ export function App() {
     );
   }
 
-  // 3. Approved User (Diácono, Coordinador, or Servidor) -> Full Application
-  const canSeeHermanosModule =
-    currentUser.role === 'coordinador' || currentUser.role === 'diacono';
+  // 3. Approved User -> Full Application
+  const canSeeHermanosModule = canManageBrothers(currentUser.role);
   const pendingCount = members.filter((m) => m.role === 'pendiente').length;
   const approvedMembers = members.filter(
     (m) => m.role !== 'pendiente' && m.active
@@ -509,12 +510,16 @@ export function App() {
               className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                 currentUser.role === 'diacono'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : currentUser.role === 'ayuda_directa'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                  : currentUser.role === 'ayuda_diacono'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
                   : currentUser.role === 'coordinador'
                   ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               }`}
             >
-              {currentUser.role}
+              {getRoleLabel(currentUser.role)}
             </span>
           </div>
         </div>
@@ -773,7 +778,7 @@ export function App() {
             <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200">
               {currentUser.name} •{' '}
               <span className="uppercase text-blue-600 dark:text-blue-400">
-                {currentUser.role}
+                {getRoleLabel(currentUser.role)}
               </span>
             </span>
 

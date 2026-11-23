@@ -6,6 +6,7 @@ import {
   AttendanceStatus,
   ServiceAttendance,
   MemberAttendanceRecord,
+  canTakeServiceAttendance,
 } from '../types';
 import { exportServiceAttendanceReportToPdf } from '../utils/mediaAndPdf';
 import {
@@ -52,8 +53,7 @@ export const ServiciosAttendanceView: React.FC<
   onSelectService,
   onSaveServiceAttendance,
 }) => {
-  const canTakeAttendance =
-    currentUser.role === 'diacono' || currentUser.role === 'coordinador';
+  const canTakeAttendance = canTakeServiceAttendance(currentUser.role);
 
   const currentService: ServiceColumn =
     activeSchedule.services.find((s) => s.id === selectedServiceId) ||

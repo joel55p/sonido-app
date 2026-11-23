@@ -3,6 +3,8 @@ import {
   PrivilegeSchedule,
   ServiceColumn,
   UserMember,
+  canEditSchedules,
+  getRoleLabel,
 } from '../types';
 import {
   exportScheduleElementToPdf,
@@ -88,9 +90,8 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
   onUpdateMemberPhoto,
   onOpenServiceDetail,
 }) => {
-  const canEdit =
-    currentUser.role === 'diacono' || currentUser.role === 'coordinador';
-  const isDiacono = currentUser.role === 'diacono';
+  const canEdit = canEditSchedules(currentUser.role);
+  const isDiacono = canEditSchedules(currentUser.role);
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [highlightMyTurns, setHighlightMyTurns] = useState(false);
@@ -1335,7 +1336,7 @@ export const CuadroPrivilegiosView: React.FC<CuadroPrivilegiosViewProps> = ({
                             {m.name}
                           </div>
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {m.role.toUpperCase()} • {m.phone}
+                            {getRoleLabel(m.role)} • {m.phone}
                           </div>
                         </div>
                       </button>

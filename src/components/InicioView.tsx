@@ -96,7 +96,7 @@ export const InicioView: React.FC<InicioViewProps> = ({
   }, [activeSchedule, currentUser.id]);
 
   const roleBadge = () => {
-    if (currentUser.role === 'diacono') {
+  if (currentUser.role === 'diacono') {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold">
           <ShieldCheck className="w-4 h-4" />
@@ -104,11 +104,27 @@ export const InicioView: React.FC<InicioViewProps> = ({
         </span>
       );
     }
+    if (currentUser.role === 'ayuda_directa') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-300 text-xs font-bold">
+          <ShieldCheck className="w-4 h-4" />
+          ROL: AYUDA DIRECTA DEL DIÁCONO (Acceso Total)
+        </span>
+      );
+    }
+    if (currentUser.role === 'ayuda_diacono') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-xs font-bold">
+          <ShieldCheck className="w-4 h-4" />
+          ROL: AYUDA DE DIÁCONO (Gestión de Hermanos y Asistencia)
+        </span>
+      );
+    }
     if (currentUser.role === 'coordinador') {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 text-xs font-bold">
           <Sliders className="w-4 h-4" />
-          ROL: COORDINADOR (Supervisión, Cuadros y Asistencia)
+          ROL: COORDINADOR (Control de Asistencia y Servicios)
         </span>
       );
     }

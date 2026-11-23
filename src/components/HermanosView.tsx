@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserMember } from '../types';
+import { UserMember, Role, getRoleLabel } from '../types';
 import { processUploadedPhoto } from '../utils/mediaAndPdf';
 import {
   createAvatarDataUri,
@@ -19,11 +19,11 @@ import {
   User,
   ShieldCheck,
   AlertCircle,
-  ArrowUpDown,
   Clock,
   CheckCircle2,
   AlertTriangle,
   X,
+  Award,
 } from 'lucide-react';
 
 interface HermanosViewProps {
@@ -41,12 +41,14 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
   onAddMember,
   onDeleteMember,
 }) => {
-  const isDiacono = currentUser.role === 'diacono';
-  const isCoordinador = currentUser.role === 'coordinador';
+  // Rol 1 (diacono) y Rol 2 (ayuda_directa) tienen acceso total a todo igual que Diácono
+  const hasFullDiaconoAccess =
+    currentUser.role === 'diacono' || currentUser.role === 'ayuda_directa';
+  const isAyudaDiacono = currentUser.role === 'ayuda_diacono';
 
   const [searchName, setSearchName] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<
-    'todos' | 'coordinadores' | 'servidores'
+    'todos' | 'liderazgo' | 'coordinadores' | 'servidores'
   >('todos');
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -59,7 +61,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
   const [newEmail, setNewEmail] = useState('');
   const [newPhoneDigits, setNewPhoneDigits] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'servidor' | 'coordinador'>('servidor');
+  const [newRole, setNewRole] = useState<Role>('servidor');
   const [formError, setFormError] = useState('');
 
   const handlePhotoUpload = async (
@@ -109,7 +111,11 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
       return;
     }
 
-    const assignedRole = isDiacono ? newRole : 'servidor';
+    const assignedRole: Role = hasFullDiaconoAccess
+      ? newRole
+      : newRole === 'coordinador' || newRole === 'servidor'
+      ? newRole
+      : 'servidor';
 
     const created: UserMember = {
       id: `m-${Date.now()}`,
@@ -153,36 +159,88 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
       m.name.toLowerCase().includes(searchName.trim().toLowerCase())
   );
 
-  // Separate into categories: Coordinadores and Servidores
+  // Separate into 3 categories:
+  // 1. Diácono y Ayudas de Diácono (diacono, ayuda_directa, ayuda_diacono)
+  // 2. Coordinadores (coordinador)
+  // 3. Servidores (servidor)
+  const liderazgoList = matchingMembers.filter(
+    (m) =>
+      m.role === 'diacono' ||
+      m.role === 'ayuda_directa' ||
+      m.role === 'ayuda_diacono'
+  );
   const coordinadoresList = matchingMembers.filter(
-    (m) => m.role === 'coordinador' || m.role === 'diacono'
+    (m) => m.role === 'coordinador'
   );
   const servidoresList = matchingMembers.filter((m) => m.role === 'servidor');
 
-  // Strict hierarchy check:
-  // - Diácono can manage (assign/deassign role, active status, or delete) both Coordinadores and Servidores (except himself)
-  // - Coordinador can ONLY manage (assign/deassign active status or delete) Servidores
+  // Hierarchy check:
+  // - Rol 1 (diacono) and Rol 2 (ayuda_directa) can manage anyone (except themselves)
+  // - Rol 3 (ayuda_diacono) can manage Coordinadores and Servidores
   const canManageTarget = (target: UserMember): boolean => {
     if (target.id === currentUser.id) return false;
-    if (isDiacono) {
-      return target.role === 'coordinador' || target.role === 'servidor';
+    if (hasFullDiaconoAccess) {
+      return true;
     }
-    if (isCoordinador) {
-      return target.role === 'servidor';
+    if (isAyudaDiacono) {
+      return target.role === 'coordinador' || target.role === 'servidor';
     }
     return false;
   };
 
-  const handleApprovePending = (
-    member: UserMember,
-    assignedRole: 'coordinador' | 'servidor'
-  ) => {
-    if (assignedRole === 'coordinador' && !isDiacono) return;
+  const handleApprovePending = (member: UserMember, assignedRole: Role) => {
+    if (
+      !hasFullDiaconoAccess &&
+      assignedRole !== 'coordinador' &&
+      assignedRole !== 'servidor'
+    ) {
+      return;
+    }
     onUpdateMember({
       ...member,
       role: assignedRole,
       active: true,
     });
+  };
+
+  const renderRoleBadge = (role: Role) => {
+    switch (role) {
+      case 'diacono':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-extrabold uppercase">
+            <ShieldCheck className="w-3 h-3" />
+            Diácono
+          </span>
+        );
+      case 'ayuda_directa':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 text-[10px] font-extrabold uppercase">
+            <Award className="w-3 h-3" />
+            Ayuda Directa del Diácono
+          </span>
+        );
+      case 'ayuda_diacono':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 text-[10px] font-extrabold uppercase">
+            <ShieldCheck className="w-3 h-3" />
+            Ayuda de Diácono
+          </span>
+        );
+      case 'coordinador':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-extrabold uppercase">
+            <Sliders className="w-3 h-3" />
+            Coordinador
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase">
+            <User className="w-3 h-3" />
+            Servidor
+          </span>
+        );
+    }
   };
 
   const renderMemberCard = (member: UserMember) => {
@@ -223,24 +281,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
-              {member.role === 'diacono' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-extrabold uppercase">
-                  <ShieldCheck className="w-3 h-3" />
-                  Diácono
-                </span>
-              )}
-              {member.role === 'coordinador' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-extrabold uppercase">
-                  <Sliders className="w-3 h-3" />
-                  Coordinador
-                </span>
-              )}
-              {member.role === 'servidor' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase">
-                  <User className="w-3 h-3" />
-                  Servidor
-                </span>
-              )}
+              {renderRoleBadge(member.role)}
 
               <span
                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
@@ -249,7 +290,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                     : 'bg-red-500/15 text-red-600 dark:text-red-400'
                 }`}
               >
-                {member.active ? 'Asignado / Activo' : 'Desasignado'}
+                {member.active ? 'Activo' : 'Desasignado'}
               </span>
             </div>
 
@@ -268,31 +309,31 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
         {/* Hierarchical Action Controls */}
         {editable && (
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-            {/* Diácono can change role between Coordinador and Servidor */}
-            {isDiacono ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onUpdateMember({
-                    ...member,
-                    role:
-                      member.role === 'coordinador'
-                        ? 'servidor'
-                        : 'coordinador',
-                  })
-                }
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-300 border border-blue-500/30 text-[11px] font-bold cursor-pointer transition-colors"
-              >
-                <ArrowUpDown className="w-3.5 h-3.5" />
-                {member.role === 'coordinador'
-                  ? 'Pasar a Servidor'
-                  : 'Asignar Coordinador'}
-              </button>
-            ) : (
-              <span className="text-[11px] text-slate-400">
-                Gestión de Servidor
-              </span>
-            )}
+            {/* Role Selector Dropdown */}
+            <select
+              value={member.role}
+              onChange={(e) =>
+                onUpdateMember({
+                  ...member,
+                  role: e.target.value as Role,
+                })
+              }
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              {hasFullDiaconoAccess && (
+                <>
+                  <option value="diacono">Rol 1: Diácono</option>
+                  <option value="ayuda_directa">
+                    Rol 2: Ayuda Directa del Diácono
+                  </option>
+                  <option value="ayuda_diacono">
+                    Rol 3: Ayuda de Diácono
+                  </option>
+                </>
+              )}
+              <option value="coordinador">Rol 4: Coordinador</option>
+              <option value="servidor">Rol 5: Servidor</option>
+            </select>
 
             <div className="flex items-center gap-1.5">
               {/* Assign / Deassign active status */}
@@ -350,9 +391,8 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                 Solicitudes en Sala de Espera ({pendingMembers.length})
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-300">
-                {isDiacono
-                  ? 'Personas que se acaban de registrar y esperan que les des acceso y les asignes su rol (Coordinador o Servidor).'
-                  : 'Personas que se acaban de registrar y esperan acceso. Como Coordinador puedes darles acceso como Servidor.'}
+                Personas que se acaban de registrar y esperan que les aceptes y
+                les asignes su rol en el Departamento de Sonido.
               </p>
             </div>
           </div>
@@ -391,38 +431,65 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-end gap-2">
-                  {/* Diácono can approve as Coordinador OR Servidor */}
-                  {isDiacono && (
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                    Aceptar y asignar rol como:
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {hasFullDiaconoAccess && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleApprovePending(pending, 'ayuda_directa')
+                          }
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold shadow cursor-pointer transition-all"
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          Ayuda Directa Diácono
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleApprovePending(pending, 'ayuda_diacono')
+                          }
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold shadow cursor-pointer transition-all"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Ayuda de Diácono
+                        </button>
+                      </>
+                    )}
+
                     <button
                       type="button"
                       onClick={() =>
                         handleApprovePending(pending, 'coordinador')
                       }
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow cursor-pointer transition-all"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold shadow cursor-pointer transition-all"
                     >
                       <Sliders className="w-3.5 h-3.5" />
-                      Dar Acceso como Coordinador
+                      Coordinador
                     </button>
-                  )}
 
-                  {/* Both Diácono and Coordinador can approve as Servidor */}
-                  <button
-                    type="button"
-                    onClick={() => handleApprovePending(pending, 'servidor')}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow cursor-pointer transition-all"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Dar Acceso como Servidor
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApprovePending(pending, 'servidor')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow cursor-pointer transition-all"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Servidor
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setMemberToDelete(pending)}
-                    className="px-2.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold cursor-pointer"
-                  >
-                    Rechazar
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setMemberToDelete(pending)}
+                      className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 text-[11px] font-bold cursor-pointer ml-auto"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -441,9 +508,9 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
               Directorio de Hermanos con Acceso
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-              {isDiacono
-                ? 'Como DIÁCONO puedes asignar, desasignar o eliminar cuentas tanto de Coordinadores como de Servidores.'
-                : 'Como COORDINADOR puedes consultar todo el directorio por categoría y asignar, desasignar o eliminar cuentas únicamente de Servidores.'}
+              {hasFullDiaconoAccess
+                ? `Con tu rol de ${getRoleLabel(currentUser.role)} tienes acceso total para gestionar Ayudas de Diácono, Coordinadores y Servidores.`
+                : 'Como Ayuda de Diácono puedes aceptar nuevos hermanos y gestionar Coordinadores y Servidores.'}
             </p>
           </div>
         </div>
@@ -457,11 +524,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
-          {showAddForm
-            ? 'Cerrar Formulario'
-            : isDiacono
-            ? 'Agregar Directamente Coordinador / Servidor'
-            : 'Agregar Directamente Servidor'}
+          {showAddForm ? 'Cerrar Formulario' : 'Agregar Hermano Directamente'}
         </button>
       </div>
 
@@ -472,9 +535,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
           className="bg-white dark:bg-slate-900 border-2 border-blue-500/40 rounded-2xl p-6 shadow-lg space-y-4"
         >
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            {isDiacono
-              ? 'Registrar y Dar Acceso Directo (Coordinador o Servidor)'
-              : 'Registrar y Dar Acceso Directo (Servidor)'}
+            Registrar y Dar Acceso Directo
           </h3>
 
           {formError && (
@@ -552,27 +613,26 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Categoría / Rol
+                Rol Asignado
               </label>
-              {isDiacono ? (
-                <select
-                  value={newRole}
-                  onChange={(e) =>
-                    setNewRole(e.target.value as 'servidor' | 'coordinador')
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                >
-                  <option value="servidor">Servidor</option>
-                  <option value="coordinador">Coordinador</option>
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  disabled
-                  value="Servidor"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-xs text-slate-500"
-                />
-              )}
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as Role)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+              >
+                <option value="servidor">Rol 5: Servidor</option>
+                <option value="coordinador">Rol 4: Coordinador</option>
+                {hasFullDiaconoAccess && (
+                  <>
+                    <option value="ayuda_diacono">
+                      Rol 3: Ayuda de Diácono
+                    </option>
+                    <option value="ayuda_directa">
+                      Rol 2: Ayuda Directa del Diácono
+                    </option>
+                  </>
+                )}
+              </select>
             </div>
           </div>
 
@@ -601,7 +661,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
           <button
             type="button"
             onClick={() => setCategoryFilter('todos')}
@@ -612,6 +672,17 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
             }`}
           >
             Todos ({matchingMembers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('liderazgo')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              categoryFilter === 'liderazgo'
+                ? 'bg-blue-600 text-white shadow'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            Diácono y Ayudas ({liderazgoList.length})
           </button>
           <button
             type="button"
@@ -638,7 +709,29 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
         </div>
       </div>
 
-      {/* Category 1: COORDINADORES */}
+      {/* Category 1: DIÁCONO Y AYUDAS DE DIÁCONO */}
+      {(categoryFilter === 'todos' || categoryFilter === 'liderazgo') && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              Categoría: Diácono y Ayudas de Diácono ({liderazgoList.length})
+            </h3>
+          </div>
+
+          {liderazgoList.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-500">
+              No hay miembros en esta categoría aún.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {liderazgoList.map(renderMemberCard)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Category 2: COORDINADORES */}
       {(categoryFilter === 'todos' || categoryFilter === 'coordinadores') && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
@@ -646,11 +739,6 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
               <Sliders className="w-4 h-4" />
               Categoría: Coordinadores ({coordinadoresList.length})
             </h3>
-            {!isDiacono && (
-              <span className="text-[11px] text-slate-400">
-                Solo el Diácono puede asignar, desasignar o eliminar Coordinadores
-              </span>
-            )}
           </div>
 
           {coordinadoresList.length === 0 ? (
@@ -665,7 +753,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
         </div>
       )}
 
-      {/* Category 2: SERVIDORES */}
+      {/* Category 3: SERVIDORES */}
       {(categoryFilter === 'todos' || categoryFilter === 'servidores') && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
@@ -673,11 +761,6 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
               <User className="w-4 h-4" />
               Categoría: Servidores ({servidoresList.length})
             </h3>
-            <span className="text-[11px] text-slate-400">
-              {isDiacono
-                ? 'Puedes ascenderlos a Coordinador, desasignarlos o eliminar su cuenta'
-                : 'Como Coordinador puedes asignar, desasignar o eliminar cuentas de Servidores'}
-            </span>
           </div>
 
           {servidoresList.length === 0 ? (
@@ -724,7 +807,7 @@ export const HermanosView: React.FC<HermanosViewProps> = ({
                 />
                 <div className="min-w-0 flex-1">
                   <span className="inline-block px-2 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-extrabold uppercase">
-                    Rol: {memberToDelete.role}
+                    Rol: {getRoleLabel(memberToDelete.role)}
                   </span>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">
                     {memberToDelete.name}
